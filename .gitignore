@@ -1,0 +1,8 @@
+node_modules
+*.log
+logs
+.grunt
+
+venv/
+build/
+*.pyc
