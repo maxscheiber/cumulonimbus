@@ -1,4 +1,6 @@
 import logging
+import os
+import signal
 import sys
 import time
 
@@ -11,8 +13,8 @@ logger = logging.getLogger(__name__)
 
 def start_watchdog():
     try:
-        file_watcher = file_watcher.FileWatcher(watch_path, logger)
-        file_watcher.start()
+        watcher = file_watcher.FileWatcher(watch_path, logger)
+        watcher.start()
     except Exception as e:
         logger.exception("OOPS")
 
@@ -43,4 +45,6 @@ if __name__ == '__main__':
         watch_path = sys.argv[2]
         daemon.start()
     else:
-        daemon.exit()
+        pidfile = open(pid, 'r')
+        pid_num = int(pidfile.readline())
+        os.kill(pid_num, signal.SIGKILL)
