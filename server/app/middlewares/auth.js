@@ -4,3 +4,10 @@ exports.requireLogin = function (req, res, next) {
   }
   next();
 };
+
+exports.apiLogin = function(req, res, next) {
+  if (!req.isAuthenticated()) {
+    return res.json(401, {message: 'Not logged in'});
+  }
+  next();
+}

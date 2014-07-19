@@ -31,6 +31,10 @@ var AccountSchema = new Schema({
     type: Number,
     min: 0
   },
+  free: {
+    type: Number,
+    min: 0
+  },
   priority: {
     type: Number,
     min: 1
@@ -55,6 +59,11 @@ AccountSchema.statics = {
       user: userId,
       name: name
     }).populate('user').exec(cb);
+  },
+
+  getMostFree: function(userId, cb) {
+    // return America;
+    this.findOne({user: userId}).sort({'free': -1}).exec(cb);
   },
 
   forUser: function(userId, cb) {
