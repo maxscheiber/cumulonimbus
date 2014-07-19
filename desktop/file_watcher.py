@@ -22,9 +22,12 @@ class CumulonimbusFSEventHandler(watchdog.events.FileSystemEventHandler):
     def on_created(self, event):
         super(CumulonimbusFSEventHandler, self).on_created(event)
         # USE REQUESTS TO CALL HOOK
-        file_name = event.src_path[len(self.watch_directory):]
-        path_to_dropbox_file = '/' + file_name
-        response = self.dropbox_client.put_file(path_to_dropbox_file, event.src_path)
+        try:
+            file_name = event.src_path[len(self.watch_directory):]
+            path_to_dropbox_file = file_name
+            response = self.dropbox_client.put_file(path_to_dropbox_file, event.src_path)
+        except Exception as e:
+            self.logger.exception("OOPS")
 
     # call hook to delete file
     def on_deleted(self, event):
@@ -32,9 +35,16 @@ class CumulonimbusFSEventHandler(watchdog.events.FileSystemEventHandler):
         # USE REQUESTS TO CALL HOOK
         try:
             file_name = event.src_path[len(self.watch_directory):]
-            self.logger.debug(file_name)
-            path_to_dropbox_file = '/' + file_name
+            path_to_dropbox_file = file_name
             response = self.dropbox_client.file_delete(path_to_dropbox_file)
+        except Exception as e:
+            self.logger.exception("OOPS")
+
+    def on_moved(self, event):
+        try:
+            src_file_name = event.src_path[len(self.watch_directory):]
+            dest_file_name = event.dest_path[len(self.watch_directory):]
+            response = self.dropbox_client.file_move(src_file_name, dest_file_name)
         except Exception as e:
             self.logger.exception("OOPS")
 
