@@ -1,0 +1,6 @@
+PyYAML==3.11
+argh==0.25.0
+daemonize==2.3.1
+pathtools==0.1.2
+watchdog==0.8.0
+wsgiref==0.1.2
