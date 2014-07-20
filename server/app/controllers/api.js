@@ -374,7 +374,21 @@ exports.instructionsModify = function(req, res) {
 }
 
 exports.instructionsDelete = function(req, res) {
-  return res.json({message: 'not done yet'});
+  var post = req.body;
+  var path = File.normalizePath(post.path);
+  var name = post.name;
+  var userId = req.user._id;
+
+  File.forUserPathName(path, name, userId, function (err, file) {
+    if (err || !file) {
+      console.log(err);
+      return res.json(500);
+    }
+    return res.json({
+      status: 'success',
+      file: File.toSimpleJSON(file)
+    });
+  });
 }
 
 exports.updateNew = function(req, res) {
@@ -505,7 +519,7 @@ exports.updateDelete = function(req, res) {
   } else {
     File.remove({
       user: userId,
-      path: path,
+      path: File.normalizePath(path),
       name: filename
     }, returnJSON(res, 'Removed file', 'Failed to remove file'));
   }

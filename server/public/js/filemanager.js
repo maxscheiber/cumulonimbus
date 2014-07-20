@@ -60,15 +60,57 @@ $(function () {
     list();
   });
 
-  $('#list').on('click', '.delete', function (data) {
+  $('#list').on('click', '.delete', function (e) {
+    e.preventDefault();
+    var path = window.location.hash ? window.location.hash.replace('#', '') : '/';
+    var name = $(e.target).parent().parent().find('.first').text();
     $.post('/api/instructions/delete', {
-      // TODO: should be based on absolute path, or file ID
-      file: $(this).attr('data-file'),
-      xsrf: XSRF
-    }, function (response) {
-      // TODO: figure out where to delete from
-      list();
-    }, 'json');
+      path: path,
+      name: name
+    }, function (data) {
+      // TODO: directories
+      if (data.status === 'success' && data.file.provider === 'dropbox') {
+        console.log(data.file.account);
+        $.ajax({
+          type: 'POST',
+          url: 'https://api.dropbox.com/1/fileops/delete',
+          headers: {'Authorization': 'Bearer ' + data.file.account.oauthToken},
+          data: {
+            root: 'auto',
+            path: data.file.path + data.file.name
+          },
+          error: function(a,b,c) {
+            console.log(data.file);
+            $.ajax({
+              type: 'POST',
+              url: '/api/update/delete',
+              data: {
+                path: data.file.path,
+                filename: data.file.name
+              },
+              success: function(data) {
+                list();
+              }
+            });
+          },
+          success: function (data) {
+            $.ajax({
+              type: 'POST',
+              url: '/api/update/delete',
+              data: {
+                path: data.file.path,
+                filename: data.file.name
+              },
+              success: function(data) {
+                list();
+              }
+            });
+          }
+        });
+      } else if (data.status === 'success' && data.file.provider === 'gdrive') {
+        console.log('not done yet');
+      }
+    });
     return false;
   });
 
