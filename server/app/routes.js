@@ -27,6 +27,8 @@ module.exports = function(app) {
   app.get('/box', api.box);
   app.get('/gdrive', api.gdrive);
 
+  app.post('/getmorespace', auth.requireLogin, account.automate);
+
   app.post('/api/login', api.login)
   app.get(/^\/api\/folder\/(.*)/, auth.apiLogin, api.pathListing);
   app.get(/^\/api\/tree\/(.*)/, auth.apiLogin, api.treeListing);

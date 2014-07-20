@@ -16,6 +16,23 @@ exports.show = function(req, res) {
   });
 };
 
+exports.automate = function(req, res) {
+  var account = new Account({
+    'name': 'Automatic extra space',
+    'user': req.user._id,
+    'provider': 'dropbox',
+    'capacity': 2*1024*1024*1024,
+    'free': 2*1024*1024*1024,
+    'used': 0,
+    'priority': 1,
+    'createDate': Date.now()
+  });
+
+  account.save(function(err) {
+    res.redirect('https://www.dropbox.com/m?a=' + account._id);
+  })
+}
+
 exports.create = function(req, res) {
   if (req.method === 'GET') {
     return res.render('account_link');
@@ -60,7 +77,7 @@ exports.create = function(req, res) {
             '&response_type=code&redirect_uri=http://localhost:8080/dropbox' +
             '&state=' + account._id);
     } else if (provider === 'box') {
-      return res.redirect('https://www.box.com/api/oauth2/authorize' + '?response_type=code' + 
+      return res.redirect('https://www.box.com/api/oauth2/authorize' + '?response_type=code' +
         '&client_id=' + process.env.BOX_ID + '&state=' + account._id);
     } else if (provider === 'gdrive') {
       return res.redirect('https://accounts.google.com/o/oauth2/auth?' + 'response_type=code' +
