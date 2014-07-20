@@ -71,12 +71,12 @@ $(function () {
     var hashval = window.location.hash.substr(1),
       $dir = $(this).find('[name=name]');
     e.preventDefault();
-    $dir.val().length && $.post('/makedir', {
-      name: $dir.val(),
-      xsrf: XSRF,
-      file: hashval
+    var name = $dir.val();
+    $dir.val().length && $.post('/api/instructions/new', {
+      size: 0,
+      isDir: true
     }, function (data) {
-      list();
+      uploadFolder(name);
     }, 'json');
     $dir.val('');
     return false;
@@ -107,15 +107,6 @@ $(function () {
   function uploadFile(file) {
     // what even is this
     var folder = window.location.hash.substr(1);
-
-    /*if (file.size > MAX_UPLOAD_SIZE) {
-      var $error_row = renderFileSizeErrorRow(file, folder);
-      $('#upload_progress').append($error_row);
-      window.setTimeout(function () {
-        $error_row.fadeOut();
-      }, 5000);
-      return false;
-    }*/
 
     // TODO; add session ID
     $.post('/api/instructions/new', {'size': file.size}, function (data) {
@@ -161,7 +152,7 @@ $(function () {
         }
 
         else if (provider === 'box') {
-          var form = new FormData();
+          /*var form = new FormData();
           form.append('file', file);
           // TODO: parent_id
           form.append('parent_id', 0);
@@ -176,22 +167,101 @@ $(function () {
             data: form
           }, function (data) {
             console.log(data);
-          });
+          });*/
         }
 
         else if (provider === 'gdrive') {
-          // get root directory
-          $.ajax({
-            url: 'https://www.googleapis.com/upload/drive/v2/files',
-            headers: { 
-              Authorization: 'Bearer ' + token
+          var path = '/'; // TODO: get directory if not in root
+
+          const boundary = '-------314159265358979323846';
+          const delimiter = "\r\n--" + boundary + "\r\n";
+          const close_delim = "\r\n--" + boundary + "--";
+
+          var reader = new FileReader();
+          reader.readAsBinaryString(file);
+          reader.onload = function(e) {
+            var contentType = file.type || 'application/octet-stream';
+            var metadata = {
+              'title': file.name,
+              'mimeType': contentType
+            };
+
+            var base64Data = btoa(reader.result);
+            var multipartRequestBody =
+                delimiter +
+                'Content-Type: application/json\r\n\r\n' +
+                JSON.stringify(metadata) +
+                delimiter +
+                'Content-Type: ' + contentType + '\r\n' +
+                'Content-Transfer-Encoding: base64\r\n' +
+                '\r\n' +
+                base64Data +
+                close_delim;
+
+            $.ajax({
+              'url': 'https://www.googleapis.com/upload/drive/v2/files?uploadType=multipart',
+              'method': 'POST',
+              'headers': {
+                  'Content-Type': 'multipart/mixed; boundary="' + boundary + '"',
+                  'Authorization': 'Bearer ' + token
+                },
+              'data': multipartRequestBody,
+              'success': function (resp) {
+                //var resp = JSON.parse(xhr.responseText);
+                $.post('/api/update/new',
+                  {
+                    filename: resp.title,
+                    path: path,
+                    provider: 'gdrive',
+                    cloudId: resp.id,
+                    size: parseInt(resp.fileSize),
+                    accountId: data.account.id
+                  },
+                  function (data) {
+                    $row.remove();
+                    list();
+                  }
+                );
+              }
+            });
+          }
+        }
+      }
+    });
+  };
+
+  function uploadFolder(name) {
+    var folder = window.location.hash.substr(1);
+
+    // TODO; add session ID
+    $.post('/api/instructions/new', {'size': 0}, function (data) {
+      if (data.error) {
+        // not enough space, handle gracefully or something like that
+      } else {
+        // figure out provider and whatnot
+        var account = data.account;
+        var provider = account.provider;
+        var token = account.token;
+        if (provider === 'dropbox') {
+          $.post('/api/update/new',
+            {
+              filename: name, // actually folder name
+              isDir: true,
+              path: folder,
+              provider: 'dropbox',
+              cloudId: folder + '/' + name,
+              size: 0,
+              accountId: data.account.id
             },
-            type: 'POST',
-            data: file,
-            success: function (data) {
-              console.log(data);
+            function (data) {
+              if ($row) {
+                $row.remove();
+              }
+              list();
             }
-          });
+          );
+        } else if (provider === 'gdrive') {
+
         }
       }
     });

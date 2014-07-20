@@ -49,7 +49,6 @@ var dropboxGet = function(path, account) {
           console.log(entity.path + ' is a directory, recursing');
           dropboxGet(entity.path, account);
         } else {
-          console.log(entity);
           Account.getMostFree(account.user, function(err, freeAccount) {
             if (err || !freeAccount) {
               console.log('Could not add Dropbox file to account');
@@ -94,11 +93,81 @@ var dropboxGet = function(path, account) {
   });
 }
 
+var gdriveGet = function(path, account, folderId) {
+  var options = {
+    url: 'https://www.googleapis.com/drive/v2/files/' + folderId + '/children',
+    headers: {
+      'Authorization': 'Bearer ' + account.oauthToken
+    }
+  };
+  request(options, function (err, resp, body) {
+    if (err) {
+      console.log(err);
+      return;
+    }
+    console.log(body);
+    var items = JSON.parse(body).items;
+    async.forEach(items, function (entity, cb) {
+      var options = {
+        url: 'https://www.googleapis.com/drive/v2/files/' + entity.id,
+        headers: {
+          'Authorization': 'Bearer ' + account.oauthToken
+        }
+      };
+      request(options, function (err, resp, blob) {
+        if (err) {
+          console.log(err);
+          return;
+        }
+        var driveFile = JSON.parse(blob);
+        console.log(driveFile);
+        if (driveFile.mimeType === 'application/vnd.google-apps.folder') {
+          console.log(path + '/' + driveFile.title + ' is a directory, recursing');
+          gdriveGet(path + '/' + driveFile.title, account, driveFile.id);
+        } else {
+          console.log(path + '/' + driveFile.title + ' is a file');
+          Account.getMostFree(account.user, function(err, freeAccount) {
+            if (err || !freeAccount) {
+              console.log('Could not add Google Drive file to account');
+              console.log(err);
+              return;
+            } else {
+              path = path ? path : '/';
+              var now = Date.now();
+              var size = parseInt(driveFile.fileSize);
+              var file = new File({
+                name: driveFile.title,
+                path: path,
+                provider: 'gdrive',
+                cloudId: driveFile.id,
+                size: size,
+                user: account.user,
+                account: account._id,
+                createDate: now,
+                changeDate: now
+              });
+
+              file.save(function(err) {
+                if (err) { console.log(err); return; }
+                account.used += size;
+                account.free -= size;
+                account.save(function (err) {
+                  if (err) { console.log('Error updating account'); }
+                });
+              });
+            }
+          });
+        }
+      });
+    }, function(err){});
+  });
+}
+
 var updateFileList = function(account) {
   if (account.provider === 'dropbox') {
     dropboxGet('/', account);
   } else if (account.provider === 'gdrive') {
-    // gdriveGet('/', account.oauthToken);
+    gdriveGet('', account, 'root');
   }
 }
 
@@ -372,8 +441,7 @@ exports.updateNew = function(req, res) {
   var size = parseInt(post.size);
   var accountId = post.accountId;
   var now = Date.now();
-
-  if (!(filename && path && provider && cloudId && size && accountId)) {
+  if (!(filename && path && provider && cloudId && size && accountId) && size !== 0) {
     return res.json('403', {
       status: 'error',
       message: 'Include all fields: filename path provider cloudId size accountId'

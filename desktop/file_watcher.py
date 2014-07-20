@@ -22,6 +22,29 @@ class CumulonimbusFSEventHandler(watchdog.events.FileSystemEventHandler):
         self.logger = logger
         self.watch_directory = watch_directory
         self.cookies = cookies
+        self._create_accounts_map(self.cookies)
+
+    def _create_accounts_map(self, cookies):
+        r = requests.get('http://localhost:8080/api/accounts', cookies=cookies)
+        response_json = r.json()
+        accounts = r['accounts']
+        self.accounts = {}
+        self.dropbox_clients = {}
+        self.box_clients = {}
+        self.gdrive_clients = {}
+        for account in accounts:
+            self.accounts[account['id']] = (account['provider'], account['token'])
+            if account['provider'] == 'dropbox':
+                self.dropbox_clients[account['id']] = dropbox.client.DropboxClient(account['token'])
+            elif account['provider'] = 'box':
+                self.box_clients[account['id']] = box.BoxClient(account['token'])
+            else:
+                credentials.oauth2client.client.AccessTokenCredentials(access_token=access_token,
+                                                                       user_agent='Cumulonimbus/1.0')
+                http = httplib2.Http()
+                http = credentials.authorize(http)
+                self.gdrive_clients[account['id']] = apiclient.discovery.build('drive', 'v2', http)
+
 
     # call hook to add file
     def on_created(self, event):
@@ -39,39 +62,42 @@ class CumulonimbusFSEventHandler(watchdog.events.FileSystemEventHandler):
                return
             provider = response_json['account']['provider']
             account_id = response_json['account']['id']
-            access_token = response_json['account']['token']
             file_name = event.src_path[len(self.watch_directory):]
             if provider == 'dropbox':
-                dropbox_client = dropbox.client.DropboxClient(access_token)
+                dropbox_client = self.dropbox_clients[account_id]
                 path_to_dropbox_file = file_name
                 if event.is_directory:
                     response = dropbox_client.file_create_folder(path_to_dropbox_file)
                 else:
                     response = dropbox_client.put_file(path_to_dropbox_file, event.src_path)
                 rev = response['rev']
+                size = response['bytes']
             elif provider == 'box':
-                box_client = box.BoxClient(access_token)
-                rev = self._upload_box_file(box_client=box_client,
+                box_clients = self.box_clients[account_id]
+                res = self._upload_box_file(box_client=box_client,
                                             full_path=event.src_path,
                                             file_path=file_name,
                                             is_directory=event.is_directory)
+                rev = res['rev']
+                size = res['size']
             elif provider == 'gdrive':
-                credentials = oauth2client.client.AccessTokenCredentials(access_token=access_token,
-                                                                         user_agent='Cumulonimbus/1.0')
-                http = httplib2.Http()
-                http = credentials.authorize(http)
-                gdrive_client = apiclient.discovery.build('drive', 'v2', http)
-                rev = self._upload_gdrive_file(gdrive_client=gdrive_client,
+                gdrive_client = self.gdrive_clients[account_id]
+                res = self._upload_gdrive_file(gdrive_client=gdrive_client,
                                          full_path=event.src_path,
                                          file_path=file_name,
                                          is_directory=event.is_directory)
+                rev = res['id']
+                if 'fileSize' in res:
+                    size = res['fileSize']
+                else:
+                    size = 0
 
             file_path, upload_path = self._get_file_name_and_upload_path(event, file_name)
             update_params=dict(filename=file_path,
                                path=upload_path,
                                provider=provider,
                                cloudId=rev,
-                               size=response['bytes'],
+                               size=size,
                                accountId=account_id)
             r = requests.post('http://localhost:8080/api/update/new',
                               data=json.dumps(update_params),
@@ -133,11 +159,9 @@ class CumulonimbusFSEventHandler(watchdog.events.FileSystemEventHandler):
                                cloudId=rev,
                                size=response['bytes'],
                                accountId=account_id)
-            self.logger.debug(update_params)
             r = requests.post('http://localhost:8080/api/update/modify',
                               params=params,
                               cookies=self.cookies)
-            self.logger.debug(r.text)
         except Exception as e:
             self.logger.exception("OOPS")
 
@@ -147,56 +171,111 @@ class CumulonimbusFSEventHandler(watchdog.events.FileSystemEventHandler):
         if folders[0] == '':
             file_name = folders[-1]
             resp = box_client.upload_file(filename=file_name, fileobj=full_path)
-            return resp['id']
+            return resp
         parent_id = 0
         for index, folder in enumerate(folders):
             if index == 0:
-                res = box_client.create_folder(name=folder)
-                parent_id = res['id']
+                params = dict(query=folder, type='folder')
+                search_res = box_client._request("get", "search", params).json()
+                if search_res['total_count'] == 0:
+                    res = box_client.create_folder(name=folder)
+                    parent_id = res['id']
+                else:
+                    parent_id = search_res['entries'][0]['id']
             elif index == len(folders)-1:
                 if not is_directory:
                     res = box_client.upload_file(filename=file_name, fileobj=full_path, parent=parent_id)
-                    return res['id']
+                    return res
                 else:
-                    box_client.create_folder(name=folder, parent=parent_id)
-                    return res['id']
+                    params = dict(query=folder, type='folder')
+                    search_res = box_client._request("get", "search", params).json()
+                    if search_res['total_count'] == 0:
+                        res = box_client.create_folder(name=folder, parent=parent_id)
+                        return res
+                    else:
+                        return search_res['entries'][0]
             else:
-                res = box_client.create_folder(name=folder, parent=parent_id)
-                parent_id = res['id']
+                params = dict(query=folder, type='folder')
+                search_res = box_client._request("get", "search", params).json()
+                if search_res['total_count'] == 0:
+                    res = box_client.create_folder(name=folder, parent=parent_id)
+                    parent_id = res['id']
+                else:
+                    parent_id = search_res['entries'][0]['id']
+
 
     def _upload_gdrive_file(self, gdrive_client, full_path, file_path, is_directory):
+        file_path = file_path[1:]
         folders = file_path.split('/')
         # put in root folder
-        if folders[0] == '':
-            file_name = folders[-1]
-            media_body = apiclient.http.MediaFileUpload(full_path, resumable=True)
-            body = dict(title=file_name, description='A file')
-            resp = gdrive_client.files().insert(body=body, media_body=media_body).execute()
-            return resp['id']
+        if len(folders) == 1:
+            file_name = folders[0]
+            if not is_directory:
+                self.logger.debug("FILE_PATH: %s", file_path)
+                self.logger.debug("FILENAME: %s", file_name)
+                media_body = apiclient.http.MediaFileUpload(full_path)
+                body = dict(title=file_name, description='A file')
+                res = gdrive_client.files().insert(body=body, media_body=media_body, convert=True).execute()
+                return res
+            else:
+                q = "title = '%s' and mimeType = 'application/vnd.google-apps.folder' and trashed = false" % file_name
+                param = dict(q=q)
+                files = gdrive_client.files().list(**param).execute()
+                items = files['items']
+                if len(items) == 0:
+                    body = dict(title=file_name,
+                                mimeType="application/vnd.google-apps.folder")
+                    res = gdrive_client.files().insert(body=body).execute()
+                    return res
+                else:
+                    return items[0]
         parent_id = 0
         for index, folder in enumerate(folders):
+            self.logger.debug("FOLDER: %s", folder)
             if index == 0:
-                body = dict(title=folder, mimeType="application/vnd.google-apps.folder")
-                res = gdrive_client.files.insert(body=body).execute()
-                parent_id = res['id']
+                q = "title = '%s' and mimeType = 'application/vnd.google-apps.folder' and trashed = false" % folder
+                param = dict(q=q)
+                files = gdrive_client.files().list(**param).execute()
+                items = files['items']
+                if len(items) == 0:
+                    self.logger.debug("INSERTING FOLDER: %s", folder)
+                    body = dict(title=folder, mimeType="application/vnd.google-apps.folder")
+                    res = gdrive_client.files().insert(body=body).execute()
+                    parent_id = res['id']
+                else:
+                    parent_id = items[0]['id']
             elif index == len(folders) - 1:
                 if not is_directory:
-                    media_body = apiclient.http.MediaFileUpload(full_path, resumable=True)
-                    body = dict(title=file_name, description='A file', parents=[{'id': parent_id}])
-                    res = gdrive_client.files_insert(body=body, media_body=media_body).execute()
-                    return res['id']
+                    media_body = apiclient.http.MediaFileUpload(full_path)
+                    body = dict(title=folder, description='A file', parents=[{'id': parent_id}])
+                    res = gdrive_client.files().insert(body=body, media_body=media_body, convert=True).execute()
+                    return res
                 else:
+                    q = "title = '%s' and mimeType = 'application/vnd.google-apps.folder' and trashed = false" % folder
+                    param = dict(q=q)
+                    files = gdrive_client.files().list(**param).execute()
+                    items = files['items']
+                    if len(items) == 0:
+                        body = dict(title=folder,
+                                    mimeType="application/vnd.google-apps.folder",
+                                    parents=[{'id': parent_id}])
+                        res = gdrive_client.files().insert(body=body).execute()
+                        return res
+                    else:
+                        return items[0]
+            else:
+                q = "title = '%s' and mimeType = 'application/vnd.google-apps.folder' and trashed = false" % folder
+                param = dict(q=q)
+                files = gdrive_client.files().list(**param).execute()
+                items = files['items']
+                if len(items) == 0:
                     body = dict(title=folder,
                                 mimeType="application/vnd.google-apps.folder",
                                 parents=[{'id': parent_id}])
-                    res = gdrive_client.files.insert(body=body).execute()
-                    return res['id']
-            else:
-                body = dict(title=folder,
-                            mimeType="application/vnd.google-apps.folder",
-                            parents=[{'id': parent_id}])
-                res = gdrive_client.files.insert(body=body).execute()
-                parent_id = res['id']
+                    res = gdrive_client.files().insert(body=body).execute()
+                    parent_id = res['id']
+                else:
+                    parent_id = items[0]['id']
 
 
     def _get_file_name_and_upload_path(self, event, file_name):
