@@ -42,13 +42,15 @@ var dropboxGet = function(path, account) {
             } else {
               console.log('Found file ' + entity.path + ', adding');
               var path = entity.path.split('/');
-              path.pop();
               var filename = path[path.length - 1];
+              path.pop(); // get rid of filename
+              var pathName = '/' + path.join('') + (path.join('') ? '/' : '');
+              
               var now = Date.now();
               var size = parseInt(entity.bytes);
               var file = new File({
                 name: filename,
-                path: path.join(''),
+                path: pathName,
                 provider: 'dropbox',
                 cloudId: entity.rev,
                 size: size,
@@ -59,7 +61,7 @@ var dropboxGet = function(path, account) {
               });
 
               file.save(function(err) {
-                if (err) { console.log('error saving file'); return; }
+                if (err) { console.log(err); return; }
                 account.used += size;
                 account.free -= size;
                 account.save(function (err) {
@@ -312,7 +314,7 @@ exports.instructionsNew = function(req, res) {
 
     return res.json({
       status: 'success',
-      account: reduceAccount(account)
+      account: Account.toSimpleJSON(account)
     });
   });
 }
