@@ -126,11 +126,13 @@ $(function () {
         var account = data.account;
         var provider = account.provider;
         var token = account.token;
+
+        var $row = renderFileUploadRow(file, folder);
+        $('#upload_progress').append($row);
+        var xhr = new XMLHttpRequest();
+
         if (provider === 'dropbox') {
-          var $row = renderFileUploadRow(file, folder);
-          $('#upload_progress').append($row);
-          var xhr = new XMLHttpRequest();
-          xhr.onreadystatechange = function() {
+          /*xhr.onreadystatechange = function() {
             if (xhr.readyState === 4 && xhr.status === 200) { 
               var resp = JSON.parse(xhr.responseText);
               $.post('/api/update/new',
@@ -145,11 +147,25 @@ $(function () {
                 function (data) {}
               );
             }
-          }
+          }*/
+
           xhr.open('PUT', 'https://api-content.dropbox.com/1/files_put/auto/' +
             folder + '/' + file.name);
           xhr.setRequestHeader('Authorization', 'Bearer ' + token);
           xhr.onload = function () {
+            var resp = JSON.parse(xhr.responseText);
+            $.post('/api/update/new',
+              {
+                filename: file.name,
+                path: folder,
+                provider: 'dropbox',
+                cloudId: resp.rev,
+                size: resp.bytes,
+                accountId: data.account.id
+              },
+              function (data) {}
+            );
+
             $row.remove();
             list();
           };
@@ -159,6 +175,29 @@ $(function () {
             }
           };
           xhr.send(file);
+        }
+
+        else if (provider === 'box') {
+          var form = new FormData();
+          form.append('file', file);
+          // TODO: parent_id
+          form.append('parent_id', 0);
+          var uploadUrl = 'https://upload.box.com/api/2.0/files/content';
+          var headers = { Authorization: 'Bearer ' + token };
+          $.ajax({
+            url: uploadUrl,
+            headers: headers,
+            type: 'POST',
+            processData: false,
+            contentType: false,
+            data: form
+          }, function (data) {
+            console.log(data);
+          });
+        }
+
+        else if (provider === 'gdrive') {
+          
         }
       }
     });

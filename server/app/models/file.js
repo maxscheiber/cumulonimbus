@@ -53,6 +53,10 @@ FileSchema.statics = {
     .exec(cb);
   },
 
+  forUser: function(userId, cb) {
+    this.find({user: userId}).exec(cb);
+  },
+
   forUserPath: function(path, userId, cb) {
     this.find({user: userId, path: path}).exec(cb);
   },
@@ -61,6 +65,31 @@ FileSchema.statics = {
     this.find({account: accountId})
     .sort({'_id': 1})
     .exec(cb);
+  },
+
+  toSimpleJSON: function(file) {
+    return {
+      isDir: file.name === '',
+      name: file.name,
+      path: file.path,
+      provider: file.provider,
+      cloudId: file.cloudId,
+      size: file.size,
+      account: file.accountId,
+      changeDate: file.changeDate
+    };
+  },
+
+  normalizePath: function(path) {
+    if (path.slice(0,1) !== '/') {
+      path = '/' + path;
+    }
+
+    if (path.slice(-1) !== '/') {
+      path += '/';
+    }
+
+    return path
   }
 };
 

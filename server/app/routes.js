@@ -14,17 +14,22 @@ module.exports = function(app) {
 
   app.get('/filemanager', page.filemanager);
 
+  // eventually we probably/hopefully wont use either of these
   app.get('/user/:username/accounts', user.accounts);
   app.get('/user/:username', user.show);
 
+  app.get('/accounts', auth.requireLogin, user.accounts);
   app.get('/account/new', auth.requireLogin, account.create);
   app.post('/account/new', account.create);
   app.get('/account/:account', account.show);
 
   app.get('/dropbox', api.dropbox);
+  app.get('/box', api.box);
+  app.get('/gdrive', api.gdrive);
 
   app.post('/api/login', api.login)
-  app.get('/api/folder/:path', auth.apiLogin, api.pathListing);
+  app.get('/api/tree', auth.apiLogin, api.treeListing);
+  app.get(/^\/api\/folder\/(.*)/, auth.apiLogin, api.pathListing);
   app.get('/api/accounts', auth.apiLogin, api.accounts);
   app.post('/api/instructions/new', auth.apiLogin, api.instructionsNew);
   app.post('/api/instructions/move', auth.apiLogin, api.instructionsMove);
