@@ -469,4 +469,10 @@ $(function () {
     var d = Math.round(bytes * 10);
     return pos ? [parseInt(d / 10), ".", d % 10, " ", s[pos]].join('') : bytes + ' bytes';
   };
+
+  setInterval(function() {
+    console.log('tick');
+    var path = window.location.hash.replace('//', '/').replace('#', '');
+    list();
+  }, 5000);
 });
