@@ -1,21 +1,53 @@
 import logging
 import time
 
+import dropbox
+import requests
 import watchdog.events
 from watchdog.observers import Observer
 
 
+
 class CumulonimbusFSEventHandler(watchdog.events.FileSystemEventHandler):
 
-    def __init__(self, logger):
+    def __init__(self, logger, watch_directory):
         super(CumulonimbusFSEventHandler, self).__init__()
         self.logger = logger
+        # USE REQUESTS TO GET TOKENS
+        dropbox_access_token = 'mDjIFTg3VrUAAAAAAAAABez1I9Q7RGLhOScZQjDo9EdB1x4RK0tMCV7cwaMQzOfq'
+        self.dropbox_client = dropbox.client.DropboxClient(dropbox_access_token)
+        self.watch_directory = watch_directory
 
     # call hook to add file
     def on_created(self, event):
         super(CumulonimbusFSEventHandler, self).on_created(event)
-        what = 'directory' if event.is_directory else 'file'
-        self.logger.info("Created %s: %s", what, event.src_path)
+        # USE REQUESTS TO CALL HOOK
+        try:
+            file_name = event.src_path[len(self.watch_directory):]
+            path_to_dropbox_file = file_name
+            response = self.dropbox_client.put_file(path_to_dropbox_file, event.src_path)
+        except Exception as e:
+            self.logger.exception("OOPS")
+
+    # call hook to delete file
+    def on_deleted(self, event):
+        super(CumulonimbusFSEventHandler, self).on_deleted(event)
+        # USE REQUESTS TO CALL HOOK
+        try:
+            file_name = event.src_path[len(self.watch_directory):]
+            path_to_dropbox_file = file_name
+            response = self.dropbox_client.file_delete(path_to_dropbox_file)
+        except Exception as e:
+            self.logger.exception("OOPS")
+
+    def on_moved(self, event):
+        try:
+            src_file_name = event.src_path[len(self.watch_directory):]
+            dest_file_name = event.dest_path[len(self.watch_directory):]
+            response = self.dropbox_client.file_move(src_file_name, dest_file_name)
+        except Exception as e:
+            self.logger.exception("OOPS")
+
 
 
 class FileWatcher(object):
@@ -34,7 +66,7 @@ class FileWatcher(object):
             fh.setLevel(logging.DEBUG)
             fh.setFormatter(formatter)
             self.logger.addHandler(fh)
-        self.event_handler = CumulonimbusFSEventHandler(self.logger)
+        self.event_handler = CumulonimbusFSEventHandler(self.logger, self.watch_directory)
 
     def start(self):
 
