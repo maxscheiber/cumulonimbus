@@ -63,7 +63,6 @@ FileSchema.statics = {
 
   forAccount: function(accountId, cb) {
     this.find({account: accountId})
-    .sort({'_id': 1})
     .exec(cb);
   },
 
@@ -81,7 +80,7 @@ FileSchema.statics = {
       provider: file.provider,
       cloudId: file.cloudId,
       size: file.size,
-      account: file.accountId,
+      account: file.account,
       changeDate: file.changeDate.getTime()
     };
   },
