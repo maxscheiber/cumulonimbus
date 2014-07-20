@@ -49,46 +49,28 @@ var dropboxGet = function(path, account) {
           console.log(entity.path + ' is a directory, recursing');
           dropboxGet(entity.path, account);
         } else {
-          Account.getMostFree(account.user, function(err, freeAccount) {
-            if (err || !freeAccount) {
-              console.log('Could not add Dropbox file to account');
-              console.log(err);
-              return;
-            } else {
-              console.log('Found file ' + entity.path + ', adding');
-              var path = entity.path.split('/');
-              var filename = path[path.length - 1];
-              path.pop(); // get rid of filename
-              var pathName = '/' + path.join('') + (path.join('') ? '/' : '');
+          console.log('Found file ' + entity.path + ', adding');
+          var path = entity.path.split('/');
+          var filename = path[path.length - 1];
+          path.pop(); // get rid of filename
+          var pathName = '/' + path.join('') + (path.join('') ? '/' : '');
 
-              var now = Date.now();
-              var size = parseInt(entity.bytes);
-              var file = new File({
-                name: filename,
-                path: pathName,
-                provider: 'dropbox',
-                cloudId: entity.rev,
-                size: size,
-                user: account.user,
-                account: account._id,
-                createDate: now,
-                changeDate: now
-              });
+          var now = Date.now();
+          var size = parseInt(entity.bytes);
 
-              file.save(function(err) {
-                if (err) { console.log(err); return; }
-                account.used += size;
-                account.free -= size;
-                account.save(function (err) {
-                  if (err) { console.log('Error updating account'); }
-                });
-              });
-            }
-          });
+          File.makeFile(new File({
+            name: filename,
+            path: pathName,
+            provider: 'dropbox',
+            cloudId: entity.rev,
+            size: size,
+            user: account.user,
+            account: account._id,
+            createDate: now,
+            changeDate: now
+          }), cb);
         }
-      }, function(err) {
-
-      });
+      }, function(err) { });
     }
   });
 }
@@ -105,7 +87,6 @@ var gdriveGet = function(path, account, folderId) {
       console.log(err);
       return;
     }
-    console.log(body);
     var items = JSON.parse(body).items;
     async.forEach(items, function (entity, cb) {
       var options = {
@@ -120,43 +101,26 @@ var gdriveGet = function(path, account, folderId) {
           return;
         }
         var driveFile = JSON.parse(blob);
-        console.log(driveFile);
         if (driveFile.mimeType === 'application/vnd.google-apps.folder') {
-          console.log(path + '/' + driveFile.title + ' is a directory, recursing');
-          gdriveGet(path + '/' + driveFile.title, account, driveFile.id);
+          //console.log(path + '/' + driveFile.title + ' is a directory, recursing');
+          gdriveGet(path + '/' + driveFile.title + '/', account, driveFile.id);
         } else {
-          console.log(path + '/' + driveFile.title + ' is a file');
-          Account.getMostFree(account.user, function(err, freeAccount) {
-            if (err || !freeAccount) {
-              console.log('Could not add Google Drive file to account');
-              console.log(err);
-              return;
-            } else {
-              path = path ? path : '/';
-              var now = Date.now();
-              var size = parseInt(driveFile.fileSize);
-              var file = new File({
-                name: driveFile.title,
-                path: path,
-                provider: 'gdrive',
-                cloudId: driveFile.id,
-                size: size,
-                user: account.user,
-                account: account._id,
-                createDate: now,
-                changeDate: now
-              });
-
-              file.save(function(err) {
-                if (err) { console.log(err); return; }
-                account.used += size;
-                account.free -= size;
-                account.save(function (err) {
-                  if (err) { console.log('Error updating account'); }
-                });
-              });
-            }
-          });
+          //console.log(path + '/' + driveFile.title + ' is a file');
+          path = path === '' ? '/' : path;
+          path = path.replace('//', '/'); // ugh not sure why this is needed, but it is
+          var now = Date.now();
+          var size = parseInt(driveFile.fileSize);
+          File.makeFile(new File({
+            name: driveFile.title,
+            path: path,
+            provider: 'gdrive',
+            cloudId: driveFile.id,
+            size: size,
+            user: account.user,
+            account: account._id,
+            createDate: now,
+            changeDate: now
+          }), cb);
         }
       });
     }, function(err){});
@@ -276,7 +240,7 @@ exports.dropbox = function(req, res, next) {
 
             updateFileList(account);
 
-            return res.redirect('/accounts');
+            return res.redirect('/filemanager');
           });
         });
       } else {
@@ -318,13 +282,7 @@ exports.box = function(req, res, next) {
 
             updateFileList(account);
 
-            return res.render('accounts', {
-              user: req.user,
-              accounts: req.user.accounts,
-              partials: {
-                account: 'partials/account'
-              }
-            });
+            return res.render('accounts');
           });
         });
       } else {
@@ -427,7 +385,6 @@ exports.updateNew = function(req, res) {
   var filename = post.filename;
   var path = File.normalizePath(post.path);
   var isDir = post.isDir;
-
   if (isDir) {
     return File.ensureFolder(
       File.normalizePath(path + filename),
@@ -447,7 +404,6 @@ exports.updateNew = function(req, res) {
       message: 'Include all fields: filename path provider cloudId size accountId'
     })
   }
-
   File.makeFile(new File({
     name: filename,
     path: path,
