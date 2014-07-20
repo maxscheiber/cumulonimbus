@@ -1,7 +1,9 @@
 var mongoose = require('mongoose'),
-    passport = require('passport');
+    passport = require('passport'),
+    dotenv = require('dotenv');
 
 var Account = mongoose.model('Account');
+dotenv.load();
 
 exports.show = function(req, res) {
   Account.load(req.params.account, function(err, account) {
@@ -21,7 +23,6 @@ exports.create = function(req, res) {
   var post = req.body;
   var name = post.name;
   var provider = post.provider;
-  var token = post.token;
 
   if (!(name && provider)) {
     req.flash('error', 'You must provide a name and provider!');
@@ -31,7 +32,6 @@ exports.create = function(req, res) {
   var account = new Account({
     'name': name,
     'user': req.user._id,
-    'oauthToken': token,
     'provider': provider,
     'capacity': 2*1024*1024*1024,
     'used': 0,
@@ -48,6 +48,10 @@ exports.create = function(req, res) {
 
     req.user.addAccount(account._id);
     // add account to user account list
-    return res.redirect('/account/' + account._id);
+    // TODO: generic URL, not localhost
+    return res.redirect('https://www.dropbox.com/1/oauth2/authorize' + 
+          '?client_id=' + process.env.DROPBOX_KEY + 
+          '&response_type=code&redirect_uri=http://localhost:8080/dropbox' + 
+          '&state=' + account._id);
   })
 };

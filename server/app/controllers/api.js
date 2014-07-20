@@ -1,6 +1,10 @@
 var mongoose = require('mongoose'),
     passport = require('passport'),
-    _ = require('underscore');
+    _ = require('underscore'),
+    request = require('request'),
+    dotenv = require('dotenv');
+
+dotenv.load();
 
 var User = mongoose.model('User');
 var Account = mongoose.model('Account');
@@ -54,6 +58,54 @@ exports.accounts = function(req, res) {
       accounts: accounts
     });
   });
+}
+
+exports.dropbox = function(req, res, next) {
+  var authCode = req.param('code');
+  var accountId = req.param('state'); // CSRF
+
+  request.post('https://api.dropbox.com/1/oauth2/token',
+    {
+      auth: {
+        'user': process.env.DROPBOX_KEY,
+        'pass': process.env.DROPBOX_SECRET,
+        'sendImmediately': true
+      },
+      form: {
+        code: authCode,
+        grant_type: 'authorization_code',
+        // TODO: use whichever server we're on
+        redirect_uri: 'http://localhost:8080/dropbox'
+      }
+    }, function (error, response, body) {
+      var accessToken = JSON.parse(body).access_token;
+      if (accessToken) {
+        Account.load(accountId, function(err, account) {
+          if (err || !account) {
+            // really shouldn't happen
+            return res.render('404', {message: 'Account not found'});
+          }
+
+          account.oauthToken = accessToken;
+          account.save(function(err) {
+            if (err) {
+              console.log(err);
+              return res.render('500');
+            }
+            return res.render('accounts', {
+              user: req.user,
+              accounts: req.user.accounts,
+              partials: {
+                account: 'partials/account'
+              }
+            });
+          });
+        });
+      } else {
+        return res.render('404', {message: 'Failed to authenticate'});
+      }
+    }
+  );
 }
 
 exports.instructionsNew = function(req, res) {

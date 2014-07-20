@@ -16,7 +16,7 @@ var AccountSchema = new Schema({
   },
   oauthToken: {
     type: String,
-    required: true
+    required: false
   },
   provider: {
     type: String,
