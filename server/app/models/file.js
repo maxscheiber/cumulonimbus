@@ -1,4 +1,5 @@
-var mongoose = require('mongoose');
+var mongoose = require('mongoose'),
+    async = require('async');
 
 var Schema = mongoose.Schema,
     ObjectId = Schema.ObjectId;
@@ -72,6 +73,15 @@ FileSchema.statics = {
     var pathRegex = new RegExp('^' + path.replace(/\//, '\/'));
     console.log(pathRegex);
     this.find({user: userId, path: {$regex: pathRegex}}).exec(cb);
+  },
+
+  makeFile: function(file, cb) {
+    Account = mongoose.model('Account');
+    async.series([
+      async.apply(this.ensureFolder.bind(this), file.path, file.user),
+      file.save.bind(file),
+      async.apply(Account.addUsage.bind(Account), file.account, file.size)
+    ], cb);
   },
 
   makeFolder: function(path, name, userId, cb) {

@@ -448,7 +448,7 @@ exports.updateNew = function(req, res) {
     })
   }
 
-  var file = new File({
+  File.makeFile(new File({
     name: filename,
     path: path,
     provider: provider,
@@ -458,14 +458,7 @@ exports.updateNew = function(req, res) {
     account: accountId,
     createDate: now,
     changeDate: now
-  });
-
-
-  async.series([
-    async.apply(File.ensureFolder.bind(File), path, userId),
-    file.save.bind(file),
-    async.apply(Account.addUsage.bind(Account), accountId, size)
-  ], returnJSON(res, 'File added successfully', 'Failed to add file'));
+  }), returnJSON(res, 'File added successfully', 'Failed to add file'));
 }
 
 exports.updateMove = function(req, res) {
