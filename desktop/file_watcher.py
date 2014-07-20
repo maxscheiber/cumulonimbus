@@ -1,4 +1,5 @@
 import logging
+import os
 import time
 
 import dropbox
@@ -10,19 +11,24 @@ from watchdog.observers import Observer
 
 class CumulonimbusFSEventHandler(watchdog.events.FileSystemEventHandler):
 
-    def __init__(self, logger, watch_directory):
+    def __init__(self, logger, watch_directory, cookies):
         super(CumulonimbusFSEventHandler, self).__init__()
         self.logger = logger
         # USE REQUESTS TO GET TOKENS
         dropbox_access_token = 'mDjIFTg3VrUAAAAAAAAABez1I9Q7RGLhOScZQjDo9EdB1x4RK0tMCV7cwaMQzOfq'
         self.dropbox_client = dropbox.client.DropboxClient(dropbox_access_token)
         self.watch_directory = watch_directory
+        self.cookies = cookies
 
     # call hook to add file
     def on_created(self, event):
         super(CumulonimbusFSEventHandler, self).on_created(event)
         # USE REQUESTS TO CALL HOOK
         try:
+            params = dict(size=os.path.getsize(event.src_path))
+            r = requests.post('http://localhost:8080/api/instructions/new',
+                              params=params)
+            self.logger.debug(r.text)
             file_name = event.src_path[len(self.watch_directory):]
             path_to_dropbox_file = file_name
             response = self.dropbox_client.put_file(path_to_dropbox_file, event.src_path)
@@ -51,7 +57,7 @@ class CumulonimbusFSEventHandler(watchdog.events.FileSystemEventHandler):
 
 
 class FileWatcher(object):
-    def __init__(self, watch_directory, logger=None):
+    def __init__(self, watch_directory, logger=None, cookies=None):
         self.watch_directory = watch_directory
         if logger:
             self.logger = logger
@@ -66,13 +72,21 @@ class FileWatcher(object):
             fh.setLevel(logging.DEBUG)
             fh.setFormatter(formatter)
             self.logger.addHandler(fh)
-        self.event_handler = CumulonimbusFSEventHandler(self.logger, self.watch_directory)
+        self.cookies = cookies
+        self.event_handler = CumulonimbusFSEventHandler(logger=self.logger,
+                                                        watch_directory=self.watch_directory,
+                                                        cookies=self.cookies)
 
     def start(self):
-
         self.observer = Observer()
-        self.observer.schedule(self.event_handler, self.watch_directory, recursive=True)
-        self.observer.start()
+        self.logger.debug("starting observer.")
+        try:
+            self.observer.schedule(self.event_handler, self.watch_directory, recursive=True)
+            self.logger.debug("after schedule")
+            self.observer.start()
+        except Exception as e:
+            self.logger.exception("OOPS")
+
         try:
             while True:
                 time.sleep(1)

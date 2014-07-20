@@ -1,29 +1,45 @@
 import logging
+import json
 import os
 import signal
 import sys
 import time
 
 from daemonize import Daemonize
-import file_watcher
+import requests
 from watchdog.events import LoggingEventHandler
 from watchdog.observers import Observer
+
+import file_watcher
 
 logger = logging.getLogger(__name__)
 
 def start_watchdog():
     try:
-        watcher = file_watcher.FileWatcher(watch_path, logger)
+        watcher = file_watcher.FileWatcher(watch_directory=watch_path,
+                                           logger=logger,
+                                           cookies=cookies)
         watcher.start()
     except Exception as e:
         logger.exception("OOPS")
 
 if __name__ == '__main__':
-    if len(sys.argv) < 2:
-        print 'Usage: python app.py start|stop [args]'
-        sys.exit(1)
-    command = sys.argv[1]
     pid = '/tmp/cumulonimbus.pid'
+    if len(sys.argv) < 2:
+        print 'Usage: python app.py <path_to_watch>'
+        sys.exit(1)
+    username = raw_input('Username: ')
+    password = raw_input('Password: ')
+    #username=''
+    #password=''
+    info = dict(username=username, password=password)
+    breakpoint = True
+    r = requests.post('http://localhost:8080/api/login', params=info)
+    if r.json()['message'] == 'Bad login credentials':
+        print 'Invalid username and/or password.'
+        sys.exit(1)
+    cookies = r.cookies
+    watch_path = sys.argv[1]
     formatter = logging.Formatter(
         "%(asctime)s %(threadName)-11s %(levelname)-10s %(message)s")
     logger.setLevel(logging.DEBUG)
@@ -32,19 +48,4 @@ if __name__ == '__main__':
     fh.setLevel(logging.DEBUG)
     fh.setFormatter(formatter)
     logger.addHandler(fh)
-    keep_fds = [fh.stream.fileno()]
-    daemon = Daemonize(app="cumulonimbus",
-                       pid=pid,
-                       action=start_watchdog,
-                       keep_fds=keep_fds,
-                       logger=logger)
-    if command == 'start':
-        if len(sys.argv) < 3:
-            print 'Usage: python app.py start <path_to_watch>'
-            sys.exit(1)
-        watch_path = sys.argv[2]
-        daemon.start()
-    else:
-        pidfile = open(pid, 'r')
-        pid_num = int(pidfile.readline())
-        os.kill(pid_num, signal.SIGKILL)
+    start_watchdog()
