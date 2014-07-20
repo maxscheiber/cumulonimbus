@@ -101,6 +101,10 @@ FileSchema.statics = {
   },
 
   ensureFolder: function(path, userId, cb) {
+    if (path === '/') {
+      return cb();
+    }
+
     var self = this;
     var prefix = path.split('/').slice(0, -2).join('/') + '/';
     var folder = path.split('/').slice(-2, -1);
