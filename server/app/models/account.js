@@ -3,7 +3,7 @@ var mongoose = require('mongoose');
 var Schema = mongoose.Schema,
     ObjectId = Schema.ObjectId;
 
-var providers = 'dropbox gdrive'.split(' ');
+var providers = 'dropbox box gdrive'.split(' ');
 
 var AccountSchema = new Schema({
   name: {

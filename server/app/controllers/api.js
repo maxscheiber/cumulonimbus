@@ -42,12 +42,13 @@ var dropboxGet = function(path, account) {
             } else {
               console.log('Found file ' + entity.path + ', adding');
               var path = entity.path.split('/');
+              path.pop();
               var filename = path[path.length - 1];
               var now = Date.now();
               var size = parseInt(entity.bytes);
               var file = new File({
                 name: filename,
-                path: entity.path,
+                path: path.join(''),
                 provider: 'dropbox',
                 cloudId: entity.rev,
                 size: size,
@@ -189,6 +190,94 @@ exports.dropbox = function(req, res, next) {
             updateFileList(account);
 
             return res.redirect('/accounts');
+          });
+        });
+      } else {
+        return res.render('404', {message: 'Failed to authenticate'});
+      }
+    }
+  );
+}
+
+exports.box = function(req, res, next) {
+  var authCode = req.param('code');
+  var accountId = req.param('state'); // CSRF
+
+  request.post('https://www.box.com/api/oauth2/token',
+    {
+      form: {
+        code: authCode,
+        grant_type: 'authorization_code',
+        // TODO: use whichever server we're on
+        redirect_uri: 'http://localhost:8080/box',
+        client_id: process.env.BOX_ID,
+        client_secret: process.env.BOX_SECRET
+      }
+    }, function (error, response, body) {
+      var accessToken = JSON.parse(body).access_token;
+      if (accessToken) {
+        Account.load(accountId, function(err, account) {
+          if (err || !account) {
+            // really shouldn't happen
+            return res.render('404', {message: 'Account not found'});
+          }
+
+          account.oauthToken = accessToken;
+          account.save(function(err) {
+            if (err) {
+              console.log(err);
+              return res.render('500');
+            }
+
+            updateFileList(account);
+
+            return res.render('accounts', {
+              user: req.user,
+              accounts: req.user.accounts,
+              partials: {
+                account: 'partials/account'
+              }
+            });
+          });
+        });
+      } else {
+        return res.render('404', {message: 'Failed to authenticate'});
+      }
+    }
+  );
+}
+
+exports.gdrive = function(req, res, next) {
+  var authCode = req.param('code');
+  var accountId = req.param('state'); // CSRF
+  request.post('https://accounts.google.com/o/oauth2/token',
+    {
+      form: {
+        code: authCode,
+        grant_type: 'authorization_code',
+        // TODO: use whichever server we're on
+        redirect_uri: 'http://localhost:8080/gdrive',
+        client_id: process.env.GDRIVE_ID,
+        client_secret: process.env.GDRIVE_SECRET
+      }
+    }, function (error, response, body) {
+      var accessToken = JSON.parse(body).access_token;
+      if (accessToken) {
+        Account.load(accountId, function(err, account) {
+          if (err || !account) {
+            // really shouldn't happen
+            return res.render('404', {message: 'Account not found'});
+          }
+
+          account.oauthToken = accessToken;
+          account.save(function(err) {
+            if (err) {
+              console.log(err);
+              return res.render('500');
+            }
+
+            updateFileList(account);
+            return res.render('accounts');
           });
         });
       } else {
