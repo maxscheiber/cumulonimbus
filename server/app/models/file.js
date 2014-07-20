@@ -14,18 +14,20 @@ var FileSchema = new Schema({
     type: String,
     required: true
   },
+  isDir: {
+    type: Boolean,
+    required: true,
+    default: false
+  },
   provider: {
     type: String,
-    required: true,
     enum: providers
   },
   cloudId: {
     type: String,
-    required: true
   },
   size: {
     type: Number,
-    required: true
   },
   user: {
     type: ObjectId,
@@ -70,6 +72,47 @@ FileSchema.statics = {
     var pathRegex = new RegExp('^' + path.replace(/\//, '\/'));
     console.log(pathRegex);
     this.find({user: userId, path: {$regex: pathRegex}}).exec(cb);
+  },
+
+  makeFolder: function(path, name, userId, cb) {
+    var now = Date.now();
+
+    // breaking the fuck out of the greppable codebase rule here
+    var folder = new this({
+      user: userId,
+      path: path,
+      name: name,
+      isDir: true,
+      createDate: now,
+      changeDate: now
+    });
+
+    folder.save(cb);
+  },
+
+  ensureFolder: function(path, userId, cb) {
+    var self = this;
+    var prefix = path.split('/').slice(0, -2).join('/') + '/';
+    var folder = path.split('/').slice(-2, -1);
+
+    this.findOne({
+      user: userId,
+      path: prefix,
+      name: folder,
+      isDir: true
+    }, function(err, file) {
+      if (file) {
+        return cb();
+      } else {
+        if (prefix === '/') {
+          return self.makeFolder(prefix, folder, userId, cb);
+        } else {
+          return self.ensureFolder(prefix, userId, function(err) {
+            self.makeFolder(prefix, folder, userId, cb);
+          });
+        }
+      }
+    });
   },
 
   toSimpleJSON: function(file) {

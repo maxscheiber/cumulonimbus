@@ -11,6 +11,22 @@ var User = mongoose.model('User');
 var Account = mongoose.model('Account');
 var File = mongoose.model('File');
 
+function returnJSON(res, message, failMessage) {
+  return function(err) {
+    if (err) {
+      return res.json(500, {
+        status: 'error',
+        message: failMessage
+      });
+    }
+
+    return res.json({
+      status: 'success',
+      message: message
+    });
+  }
+}
+
 // Asynchronous DFS over Dropbox
 var dropboxGet = function(path, account) {
   var options = {
@@ -45,7 +61,7 @@ var dropboxGet = function(path, account) {
               var filename = path[path.length - 1];
               path.pop(); // get rid of filename
               var pathName = '/' + path.join('') + (path.join('') ? '/' : '');
-              
+
               var now = Date.now();
               var size = parseInt(entity.bytes);
               var file = new File({
@@ -147,7 +163,7 @@ exports.accounts = function(req, res) {
       });
     }
 
-    accounts = _.map(user.accounts, Account.toSimpleJson);
+    accounts = _.map(user.accounts, Account.toSimpleJSON);
 
     return res.json({
       status: 'success',
@@ -337,8 +353,20 @@ exports.instructionsDelete = function(req, res) {
 exports.updateNew = function(req, res) {
   var post = req.body;
 
+  var userId = req.user._id;
+
   var filename = post.filename;
   var path = File.normalizePath(post.path);
+  var isDir = post.isDir;
+
+  if (isDir) {
+    return File.ensureFolder(
+      File.normalizePath(path + filename),
+      userId,
+      returnJSON(res, 'Successfully added folder', 'Failed to add folder')
+    );
+  }
+
   var provider = post.provider;
   var cloudId = post.cloudId;
   var size = parseInt(post.size);
@@ -358,34 +386,18 @@ exports.updateNew = function(req, res) {
     provider: provider,
     cloudId: cloudId,
     size: size,
-    user: req.user._id,
+    user: userId,
     account: accountId,
     createDate: now,
     changeDate: now
   });
 
-  file.save(function(err) {
-    if (err) {
-      return res.json(500, {
-        status: 'error',
-        message: 'Failed to add file'
-      });
-    }
 
-    Account.addUsage(accountId, size, function(err) {
-      if (err) {
-        return res.json(500, {
-          status: 'error',
-          message: 'Failed to update space usage'
-        });
-      }
-
-      return res.json({
-        status: 'success',
-        message: 'File added successfully'
-      });
-    });
-  });
+  async.series([
+    async.apply(File.ensureFolder.bind(File), path, userId),
+    file.save.bind(file),
+    async.apply(Account.addUsage.bind(Account), accountId, size)
+  ], returnJSON(res, 'File added successfully', 'Failed to add file'));
 }
 
 exports.updateMove = function(req, res) {
@@ -397,13 +409,29 @@ exports.updateMove = function(req, res) {
   var newFilename = post.newFilename;
   var newPath = File.normalizePath(post.newPath);
 
+  var userId = req.user._id;
+
+  //TODO: ensure folder?
+
   if (filename === '') {
-    File.moveFolder(path, newPath);
+    // this is gonna be a bitch
+    //File.moveFolder(path, newPath);
+    return res.json(403, {
+      status: 'error',
+      message: 'cant move folders yet'
+    });
   } else {
-    File.update(
-      {path: path, filename: filename},
-      {path: newPath, filename: newFilename, changeDate: Date.now()}
-    );
+    File.update({
+      user: userId,
+      path: path,
+      filename: filename
+    }, {
+      $set: {
+        path: newPath,
+        filename: newFilename,
+        changeDate: Date.now()
+      }
+    }, returnJSON(res, 'Successfully moved file', 'Failed to move file'));
   }
 }
 
@@ -412,10 +440,27 @@ exports.updateModify = function(req, res) {
 
   var filename = post.filename;
   var path = File.normalizePath(post.path);
-  var size = post.size;
+
+  var size = parseInt(post.size);
+  var provider = post.provider;
+  var cloudId = post.cloudId;
+  var accountId = post.accountId;
+
   var userId = req.user._id;
 
-  return res.json({message: 'not done yet'});
+  File.update({
+    user: userId,
+    filename: filename,
+    path: path
+  }, {
+    $set: {
+      size: size,
+      provider: provider,
+      cloudId: cloudId,
+      accountId: accountId,
+      changeDate: Date.now()
+    }
+  }, returnJSON(res, 'Successfully modified file', 'Failed to modify file'));
 }
 
 exports.updateDelete = function(req, res) {
@@ -423,24 +468,28 @@ exports.updateDelete = function(req, res) {
 
   var filename = post.filename;
   var path = File.normalizePath(post.path);
+  var isDir = post.isDir;
   var userId = req.user._id;
 
-  if (filename === '') {
-    var pathRegex = new RegExp('^' + path.replace(/\//, '\/'));
-    File.remove({user: userId, path: {$regex: pathRegex}}, newPath);
-  } else {
-    File.remove({user: userId, path: path, filename: filename}, function(err) {
-      if (err) {
-        return res.json(500, {
-          status: 'error',
-          message: 'Failed to remove file'
-        });
-      }
+  if (isDir) {
+    subPath = File.normalizePath(path + filename);
+    var pathRegex = new RegExp('^' + subPath.replace(/\//, '\/'));
 
-      return res.json({
-        status: 'success',
-        message: 'Removed file'
-      })
-    });
+    File.remove({
+      user: userId,
+      $or: [
+        {
+          path: path,
+          name: filename
+        },
+        {path: {$regex: pathRegex}}
+      ]
+    }, returnJSON(res, 'Removed folder', 'Failed to remove folder'));
+  } else {
+    File.remove({
+      user: userId,
+      path: path,
+      name: filename
+    }, returnJSON(res, 'Removed file', 'Failed to remove file'));
   }
 }
