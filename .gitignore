@@ -8,3 +8,4 @@ venv/
 build/
 *.pyc
 *.env
+change_times.txt

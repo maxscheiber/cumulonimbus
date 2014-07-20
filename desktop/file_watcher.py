@@ -53,7 +53,8 @@ class CumulonimbusFSEventHandler(watchdog.events.FileSystemEventHandler):
                 self.gdrive_clients[account['id']] = apiclient.discovery.build('drive', 'v2', http)
 
     def _create_change_times_map(self):
-        f = open(os.path.join(self.watch_directory, 'change_times.txt'), 'r')
+        f = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              'change_times.txt'), 'r')
         lines = f.readlines()
         for line in lines:
             parts = line.split('\t')
@@ -66,9 +67,11 @@ class CumulonimbusFSEventHandler(watchdog.events.FileSystemEventHandler):
         r = requests.get('http://localhost:8080/api/tree/', cookies=self.cookies)
         response_json = r.json()
         self.change_map = defaultdict(long)
-        if os.path.isfile(os.path.join(self.watch_directory, 'change_times.txt')):
+        if os.path.isfile(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                       'change_times.txt')):
             self._create_change_times_map()
-        change_times_file = open(os.path.join(self.watch_directory, 'change_times.txt'), 'w')
+        change_times_file = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                              'change_times.txt'), 'w')
         files = response_json['files']
         for f in files:
             if f['isDir']:
@@ -111,7 +114,8 @@ class CumulonimbusFSEventHandler(watchdog.events.FileSystemEventHandler):
     def _sync_filesystem_timer(self):
         r = requests.get('http://localhost:8080/api/tree/', cookies=self.cookies)
         response_json = r.json()
-        change_times_file = open(os.path.join(self.watch_directory, 'change_times.txt'), 'w')
+        change_times_file = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                              'change_times.txt'), 'w')
         files = response_json['files']
         all_files = self.change_map.keys()
         new_files = []
