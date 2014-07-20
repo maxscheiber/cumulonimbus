@@ -453,7 +453,8 @@ $(function () {
     var $link = $('<a class="name" />')
       .attr('href', data.isDir ? data.path + data.name : data.provider === 'dropbox' ?
         'http://dropbox.com/home' + data.path + data.name : '.' + data.path)
-      .text(data.name);
+      .text(data.name)
+      .attr('target', "_blank");
     var $dl_link = $('<a/>').attr('href', '?do=download&file=' + encodeURIComponent(data.path))
       .addClass('download').text('download');
     var $delete_link = $('<a href="#" />').attr('data-file', data.path).addClass('delete').text('delete');
