@@ -103,6 +103,7 @@ class CumulonimbusFSEventHandler(watchdog.events.FileSystemEventHandler):
                 else:
                     continue
                 self.change_map[fs_path] = long(f['changeDate'])
+                self.names_to_ids[fs_path] = f['cloudId']
                 out.close()
             change_times_file.write(fs_path + '\t' + str(f['changeDate']) + '\n')
         change_times_file.close()
@@ -168,6 +169,7 @@ class CumulonimbusFSEventHandler(watchdog.events.FileSystemEventHandler):
                 else:
                     continue
                 self.change_map[fs_path] = long(f['changeDate'])
+                self.names_to_ids[fs_path] = f['cloudId']
                 out.close()
             change_times_file.write(fs_path + '\t' + str(f['changeDate']) + '\n')
         change_times_file.close()
@@ -352,6 +354,7 @@ class CumulonimbusFSEventHandler(watchdog.events.FileSystemEventHandler):
 
 
     def _upload_gdrive_file(self, gdrive_client, full_path, file_path, is_directory):
+        file_path = file_path.replace('//', '/')
         file_path = file_path[1:]
         folders = file_path.split('/')
         # put in root folder
