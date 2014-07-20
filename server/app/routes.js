@@ -22,6 +22,8 @@ module.exports = function(app) {
   app.get('/account/:account', account.show);
 
   app.get('/dropbox', api.dropbox);
+  app.get('/box', api.box);
+  app.get('/gdrive', api.gdrive);
 
   app.post('/api/login', api.login)
   app.get('/api/folder/:path', auth.apiLogin, api.pathListing);
