@@ -79,7 +79,7 @@ class CumulonimbusFSEventHandler(watchdog.events.FileSystemEventHandler):
             provider = f['provider']
             account_id = f['account']
             f['path'] = f['path'].replace('//', '/')
-            if len(fpath['path']) >= 1 and fpath['path'][0] == '/':
+            if len(f['path']) >= 1 and f['path'][0] == '/':
                 file_path = os.path.join(self.watch_directory, f['path'][1:], f['name'])
             else:
                 file_path = os.path.join(self.watch_directory, f['path'], f['name'])
@@ -134,10 +134,29 @@ class CumulonimbusFSEventHandler(watchdog.events.FileSystemEventHandler):
                     os.makedirs(os.path.dirname(file_path))
                 out = open(file_path, 'w')
                 if provider == 'dropbox':
+                    if account_id not in self.dropbox_clients:
+                        r = requests.get('http://localhost:8080/api/accounts', cookies=self.cookies)
+                        response_json = r.json()
+                        accounts = response_json['accounts']
+                        for account in accounts:
+                            if account['id'] == account_id:
+                                self.dropbox_clients[account_id] = dropbox.client.DropboxClient(account['token'])
                     client = self.dropbox_clients[account_id]
                     with client.get_file(fs_path) as dropbox_f:
                         out.write(dropbox_f.read())
                 elif provider == 'gdrive':
+                    if account_id not in self.gdrive_clients:
+                        r = requests.get('http://localhost:8080/api/accounts', cookies=self.cookies)
+                        response_json = r.json()
+                        accounts = response_json['accounts']
+                        for account in accounts:
+                            if account['id'] == account_id:
+                                credentials = oauth2client.client.AccessTokenCredentials(access_token=account['token'],
+                                                                                       user_agent='Cumulonimbus/1.0')
+                                http = httplib2.Http()
+                                http = credentials.authorize(http)
+                                self.gdrive_clients[account['id']] = apiclient.discovery.build('drive', 'v2', http)
+
                     client = self.gdrive_clients[account_id]
                     gdrive_f = client.files().get(fileId=f['cloudId']).execute()
                     if 'downloadUrl' in gdrive_f:
