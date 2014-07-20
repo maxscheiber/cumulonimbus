@@ -26,8 +26,8 @@ module.exports = function(app) {
   app.get('/dropbox', api.dropbox);
 
   app.post('/api/login', api.login)
-  app.get('/api/tree', auth.apiLogin, api.treeListing);
   app.get(/^\/api\/folder\/(.*)/, auth.apiLogin, api.pathListing);
+  app.get(/^\/api\/tree\/(.*)/, auth.apiLogin, api.treeListing);
   app.get('/api/accounts', auth.apiLogin, api.accounts);
   app.post('/api/instructions/new', auth.apiLogin, api.instructionsNew);
   app.post('/api/instructions/move', auth.apiLogin, api.instructionsMove);
