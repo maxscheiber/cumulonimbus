@@ -406,6 +406,12 @@ exports.updateMove = function(req, res) {
 }
 
 exports.updateModify = function(req, res) {
+  var post = req.body;
+
+  var filename = post.filename;
+  var path = File.normalizePath(post.path);
+  var size = post.size;
+  var userId = req.user._id;
 
   return res.json({message: 'not done yet'});
 }
@@ -415,7 +421,24 @@ exports.updateDelete = function(req, res) {
 
   var filename = post.filename;
   var path = File.normalizePath(post.path);
+  var userId = req.user._id;
 
+  if (filename === '') {
+    var pathRegex = new RegExp('^' + path.replace(/\//, '\/'));
+    File.remove({user: userId, path: {$regex: pathRegex}}, newPath);
+  } else {
+    File.remove({user: userId, path: path, filename: filename}, function(err) {
+      if (err) {
+        return res.json(500, {
+          status: 'error',
+          message: 'Failed to remove file'
+        });
+      }
 
-  return res.json({message: 'not done yet'});
+      return res.json({
+        status: 'success',
+        message: 'Removed file'
+      })
+    });
+  }
 }
