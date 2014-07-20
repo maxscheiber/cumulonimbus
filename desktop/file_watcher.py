@@ -79,9 +79,11 @@ class CumulonimbusFSEventHandler(watchdog.events.FileSystemEventHandler):
             provider = f['provider']
             account_id = f['account']
             f['path'] = f['path'].replace('//', '/')
-            file_path = os.path.join(self.watch_directory, f['path'][1:], f['name'])
-            self.logger.debug(file_path)
-            fs_path = f['path'] + f['name']
+            if len(fpath['path']) >= 1 and fpath['path'][0] == '/':
+                file_path = os.path.join(self.watch_directory, f['path'][1:], f['name'])
+            else:
+                file_path = os.path.join(self.watch_directory, f['path'], f['name'])
+            fs_path = '/' + f['path'] + f['name']
             if self.change_map[fs_path] < long(f['changeDate']):
                 if not os.path.exists(os.path.dirname(file_path)):
                     os.makedirs(os.path.dirname(file_path))
@@ -103,7 +105,6 @@ class CumulonimbusFSEventHandler(watchdog.events.FileSystemEventHandler):
                 self.change_map[fs_path] = long(f['changeDate'])
                 out.close()
             change_times_file.write(fs_path + '\t' + str(f['changeDate']) + '\n')
-            self.names_to_ids[file_path] = f['cloudId']
         change_times_file.close()
 
     def _sync_handler(self, signum, frame):
@@ -126,7 +127,6 @@ class CumulonimbusFSEventHandler(watchdog.events.FileSystemEventHandler):
             account_id = f['account']
             f['path'] = f['path'].replace('//', '/')
             file_path = os.path.join(self.watch_directory, f['path'][1:], f['name'])
-            self.logger.debug(file_path)
             fs_path = f['path'] + f['name']
             new_files.append(fs_path)
             if self.change_map[fs_path] < long(f['changeDate']):
@@ -140,17 +140,17 @@ class CumulonimbusFSEventHandler(watchdog.events.FileSystemEventHandler):
                 elif provider == 'gdrive':
                     client = self.gdrive_clients[account_id]
                     gdrive_f = client.files().get(fileId=f['cloudId']).execute()
-                    download_url = gdrive_f['downloadUrl']
-                    if download_url:
-                       resp, content = client._http.request(download_url)
-                       if resp.status == 200:
-                          out.write(content)
+                    if 'downloadUrl' in gdrive_f:
+                        download_url = gdrive_f['downloadUrl']
+                        if download_url:
+                           resp, content = client._http.request(download_url)
+                           if resp.status == 200:
+                              out.write(content)
                 else:
                     continue
                 self.change_map[fs_path] = long(f['changeDate'])
                 out.close()
             change_times_file.write(fs_path + '\t' + str(f['changeDate']) + '\n')
-            self.names_to_ids[file_path] = f['cloudId']
         change_times_file.close()
 
         s = set(new_files)
@@ -181,6 +181,7 @@ class CumulonimbusFSEventHandler(watchdog.events.FileSystemEventHandler):
             account_id = response_json['account']['id']
             file_name = event.src_path[len(self.watch_directory):]
             if provider == 'dropbox':
+                self.logger.debug('creating on dropbox')
                 dropbox_client = self.dropbox_clients[account_id]
                 path_to_dropbox_file = file_name
                 if event.is_directory:
@@ -197,6 +198,7 @@ class CumulonimbusFSEventHandler(watchdog.events.FileSystemEventHandler):
                 rev = response['rev']
                 size = response['bytes']
             elif provider == 'box':
+                self.logger.debug('created on box')
                 box_clients = self.box_clients[account_id]
                 res = self._upload_box_file(box_client=box_client,
                                             full_path=event.src_path,
@@ -205,7 +207,17 @@ class CumulonimbusFSEventHandler(watchdog.events.FileSystemEventHandler):
                 rev = res['rev']
                 size = res['size']
             elif provider == 'gdrive':
-                gdrive_client = self.gdrive_clients[account_id]
+                self.logger.debug('creating on drive')
+                if account_id in self.gdrive_clients:
+                    gdrive_client = self.gdrive_clients[account_id]
+                else:
+                    credentials = oauth2client.client.AccessTokenCredentials(access_token=response_json['account']['token'],
+                                                                             user_agent='Cumulonimbus/1.0')
+                    http = httplib2.Http()
+                    http = credentials.authorize(http)
+                    self.gdrive_clients[account_id] = apiclient.discovery.build('drive', 'v2', http)
+                    gdrive_client = self.gdrive_clients[account_id]
+
                 res = self._upload_gdrive_file(gdrive_client=gdrive_client,
                                          full_path=event.src_path,
                                          file_path=file_name,
@@ -219,6 +231,7 @@ class CumulonimbusFSEventHandler(watchdog.events.FileSystemEventHandler):
                     size = 0
 
             file_path, upload_path = self._get_file_name_and_upload_path(event, file_name)
+            self.names_to_ids[file_name] = rev
             update_params=dict(filename=file_path,
                                path=upload_path,
                                provider=provider,
@@ -237,7 +250,9 @@ class CumulonimbusFSEventHandler(watchdog.events.FileSystemEventHandler):
         super(CumulonimbusFSEventHandler, self).on_deleted(event)
         try:
             file_name = event.src_path[len(self.watch_directory):]
+            file_name = file_name.replace('//', '/')
             self.change_map.pop(file_name, None)
+            self.names_to_ids.pop(file_name, None)
             file_path, upload_path = self._get_file_name_and_upload_path(event, file_name)
             delete_params = dict(name=file_path, path=upload_path)
             headers = {'Content-type': 'application/json', 'Accept': 'text/plain'}
@@ -247,8 +262,8 @@ class CumulonimbusFSEventHandler(watchdog.events.FileSystemEventHandler):
                               cookies=self.cookies)
             response_json = r.json()
             if response_json == 500:
+                self.logger.error("GOT DELETE 500 from people")
                 return
-            self.logger.debug(response_json)
             if 'file' not in response_json:
                 self.logger.error("COULD NOT DELETE FILE")
                 return
@@ -274,42 +289,6 @@ class CumulonimbusFSEventHandler(watchdog.events.FileSystemEventHandler):
             r = requests.post('http://localhost:8080/api/update/delete',
                               data=json.dumps(update_params),
                               headers=headers,
-                              cookies=self.cookies)
-        except Exception as e:
-            self.logger.exception("OOPS")
-
-    def on_moved(self, event):
-        try:
-            src_file_name = event.src_path[len(self.watch_directory):]
-            dest_file_name = event.dest_path[len(self.watch_directory):]
-            response = self.dropbox_client.file_move(src_file_name, dest_file_name)
-        except Exception as e:
-            self.logger.exception("OOPS")
-
-    def on_modified(self, event):
-        try:
-            params = dict(size=os.path.getsize(event.src_path))
-            r = requests.post('http://localhost:8080/api/instructions/modify',
-                              params=params, cookies=self.cookies)
-            if 'account' not in r.json():
-               self.logger.error("COULD NOT MODIFY FILE")
-               return
-            provider = r.json()['account']['provider']
-            account_id = r.json()['account']['id']
-            dropbox_client = dropbox.client.DropboxClient(r.json()['account']['token'])
-            file_name = event.src_path[len(self.watch_directory):]
-            path_to_dropbox_file = file_name
-            response = dropbox_client.put_file(path_to_dropbox_file, event.src_path, overwrite=True)
-            file_path, upload_path = self._get_file_name_and_upload_path(event, file_name)
-            rev = response['rev']
-            update_params=dict(filename=file_path,
-                               path=upload_path,
-                               provider=provider,
-                               cloudId=rev,
-                               size=response['bytes'],
-                               accountId=account_id)
-            r = requests.post('http://localhost:8080/api/update/modify',
-                              params=params,
                               cookies=self.cookies)
         except Exception as e:
             self.logger.exception("OOPS")
@@ -360,7 +339,8 @@ class CumulonimbusFSEventHandler(watchdog.events.FileSystemEventHandler):
         if len(folders) == 1:
             file_name = folders[0]
             if not is_directory:
-                if file_path in self.names_to_ids:
+                if not file_path in self.names_to_ids:
+                    self.logger.debug("ADDING NEW FILE: %s", file_path)
                     media_body = apiclient.http.MediaFileUpload(full_path)
                     body = dict(title=file_name, description='A file')
                     res = gdrive_client.files().insert(body=body, media_body=media_body, convert=True).execute()
@@ -395,6 +375,7 @@ class CumulonimbusFSEventHandler(watchdog.events.FileSystemEventHandler):
             elif index == len(folders) - 1:
                 if not is_directory:
                     if not file_path in self.names_to_ids:
+                        self.logger.debug("ADDING NEW FILE: %s", file_path)
                         media_body = apiclient.http.MediaFileUpload(full_path)
                         body = dict(title=folder, description='A file', parents=[{'id': parent_id}])
                         res = gdrive_client.files().insert(body=body, media_body=media_body, convert=True).execute()
