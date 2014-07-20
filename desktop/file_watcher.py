@@ -34,6 +34,7 @@ class CumulonimbusFSEventHandler(watchdog.events.FileSystemEventHandler):
                               headers=headers,
                               cookies=self.cookies)
             response_json = r.json()
+            self.logger.debug(response_json)
             if 'account' not in response_json:
                self.logger.error("COULD NOT CREATE FILE")
                return
