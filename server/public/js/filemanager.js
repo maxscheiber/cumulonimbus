@@ -53,15 +53,81 @@ $(function () {
   $(window).bind('hashchange', list).trigger('hashchange');
   $('#table').tablesorter();
 
-  $('#list').on('click', '.delete', function (data) {
+  $('#list').on('click', '.isDir', function(e) {
+    e.preventDefault();
+    window.location.hash += $(e.target).text() + '/';
+    window.location.hash = window.location.hash.replace('//', '/');
+    list();
+  });
+
+  $('#list').on('click', '.delete', function (e) {
+    e.preventDefault();
+    var path = window.location.hash ? window.location.hash.replace('#', '') : '/';
+    var name = $(e.target).parent().parent().find('.first').text();
     $.post('/api/instructions/delete', {
-      // TODO: should be based on absolute path, or file ID
-      file: $(this).attr('data-file'),
-      xsrf: XSRF
-    }, function (response) {
-      // TODO: figure out where to delete from
-      list();
-    }, 'json');
+      path: path,
+      name: name
+    }, function (data) {
+      // TODO: directories
+      if (data.status === 'success' && data.file.provider === 'dropbox') {
+        console.log(data.file.account);
+        $.ajax({
+          type: 'POST',
+          url: 'https://api.dropbox.com/1/fileops/delete',
+          headers: {'Authorization': 'Bearer ' + data.file.account.oauthToken},
+          data: {
+            root: 'auto',
+            path: data.file.path + data.file.name
+          },
+          error: function(a,b,c) {
+            console.log(data.file);
+            $.ajax({
+              type: 'POST',
+              url: '/api/update/delete',
+              data: {
+                path: data.file.path,
+                filename: data.file.name
+              },
+              success: function(data) {
+                list();
+              }
+            });
+          },
+          success: function (data) {
+            $.ajax({
+              type: 'POST',
+              url: '/api/update/delete',
+              data: {
+                path: data.file.path,
+                filename: data.file.name
+              },
+              success: function(data) {
+                list();
+              }
+            });
+          }
+        });
+      } else if (data.status === 'success' && data.file.provider === 'gdrive') {
+        $.ajax({
+          type: 'DELETE',
+          url: 'https://www.googleapis.com/drive/v2/files/' + data.file.cloudId,
+          headers: {'Authorization': 'Bearer ' + data.file.account.oauthToken},
+          success: function(resp) {
+            $.ajax({
+              type: 'POST',
+              url: '/api/update/delete',
+              data: {
+                path: data.file.path,
+                filename: data.file.name
+              },
+              success: function(data) {
+                list();
+              }
+            });
+          }
+        });
+      }
+    });
     return false;
   });
 
@@ -104,9 +170,120 @@ $(function () {
     });
   });
 
+  function driveUpload(file, account, path, parentId) {
+    const boundary = '-------314159265358979323846';
+    const delimiter = "\r\n--" + boundary + "\r\n";
+    const close_delim = "\r\n--" + boundary + "--";
+
+    var reader = new FileReader();
+    reader.readAsBinaryString(file);
+    reader.onload = function(e) {
+      var contentType = file.type || 'application/octet-stream';
+      var metadata;
+      if (parentId) {
+        metadata = {
+          'title': file.name,
+          'mimeType': contentType,
+          'parents': [{'id': parentId}]
+        };
+      } else {
+        metadata = {
+          'title': file.name,
+          'mimeType': contentType
+        };
+      }
+
+      var base64Data = btoa(reader.result);
+      var multipartRequestBody =
+          delimiter +
+          'Content-Type: application/json\r\n\r\n' +
+          JSON.stringify(metadata) +
+          delimiter +
+          'Content-Type: ' + contentType + '\r\n' +
+          'Content-Transfer-Encoding: base64\r\n' +
+          '\r\n' +
+          base64Data +
+          close_delim;
+
+      $.ajax({
+        'url': 'https://www.googleapis.com/upload/drive/v2/files?uploadType=multipart',
+        'method': 'POST',
+        'headers': {
+            'Content-Type': 'multipart/mixed; boundary="' + boundary + '"',
+            'Authorization': 'Bearer ' + account.token
+          },
+        'data': multipartRequestBody,
+        'success': function (resp) {
+          //var resp = JSON.parse(xhr.responseText);
+          $.post('/api/update/new',
+            {
+              filename: resp.title,
+              path: path,
+              provider: 'gdrive',
+              cloudId: resp.id,
+              size: parseInt(resp.fileSize),
+              accountId: account.id
+            },
+            function (data) {
+              $row.remove();
+              list();
+            }
+          );
+        }
+      });
+    }
+  }
+
+  function getParentId(folders, file, account, path, parentId) {
+    var folder = folders[0];
+    if (!folder || folder === '/') {
+      console.log('attempt to upload file to parenet ' + parentId);
+      driveUpload(file, account, path, parentId);
+      return;
+    }
+
+    $.ajax({
+      url: "https://www.googleapis.com/drive/v2/files?maxResults=1&q=title='" + folder + "'",
+      async: false,
+      headers: {'Authorization': 'Bearer ' + account.token},
+      success:
+        function (data) {
+          console.log (data.items);
+          if (data.items.length > 0 && data.items[0].mimeType === 'application/vnd.google-apps.folder' &&
+            data.items[0].title === folder) {
+            console.log('try next guy!');
+            folders.splice(0, 1);
+            getParentId(folders, file, account, path, data.items[0].id);
+          } else {
+            console.log('make new directory and continue');
+            console.log('parent is ' + parentId);
+            console.log('folder is ' + folder);
+            $.ajax({
+              url: "https://www.googleapis.com/drive/v2/files/",
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + account.token
+              },
+              data: JSON.stringify({
+                'title': folder,
+                'parents': [{'id': parentId ? parentId : 'root'}],
+                'mimeType': 'application/vnd.google-apps.folder'
+              }),
+              success: function (data) {
+                // new folder is made, so go to it and continue recursing
+                console.log(data);
+                folders.splice(0, 1);
+                getParentId(folders, file, account, path, data.id);
+              }
+            });
+          }
+    }});
+  }
+
   function uploadFile(file) {
     // what even is this
-    var folder = window.location.hash.substr(1);
+    var folder = window.location.hash.substr(1).replace('//', '/');
 
     // TODO; add session ID
     $.post('/api/instructions/new', {'size': file.size}, function (data) {
@@ -124,7 +301,7 @@ $(function () {
 
         if (provider === 'dropbox') {
           xhr.open('PUT', 'https://api-content.dropbox.com/1/files_put/auto/' +
-            folder + '/' + file.name);
+            (folder + '/' + file.name).replace('//', '/'));
           xhr.setRequestHeader('Authorization', 'Bearer ' + token);
           xhr.onload = function () {
             var resp = JSON.parse(xhr.responseText);
@@ -171,59 +348,12 @@ $(function () {
         }
 
         else if (provider === 'gdrive') {
-          var path = '/'; // TODO: get directory if not in root
-
-          const boundary = '-------314159265358979323846';
-          const delimiter = "\r\n--" + boundary + "\r\n";
-          const close_delim = "\r\n--" + boundary + "--";
-
-          var reader = new FileReader();
-          reader.readAsBinaryString(file);
-          reader.onload = function(e) {
-            var contentType = file.type || 'application/octet-stream';
-            var metadata = {
-              'title': file.name,
-              'mimeType': contentType
-            };
-
-            var base64Data = btoa(reader.result);
-            var multipartRequestBody =
-                delimiter +
-                'Content-Type: application/json\r\n\r\n' +
-                JSON.stringify(metadata) +
-                delimiter +
-                'Content-Type: ' + contentType + '\r\n' +
-                'Content-Transfer-Encoding: base64\r\n' +
-                '\r\n' +
-                base64Data +
-                close_delim;
-
-            $.ajax({
-              'url': 'https://www.googleapis.com/upload/drive/v2/files?uploadType=multipart',
-              'method': 'POST',
-              'headers': {
-                  'Content-Type': 'multipart/mixed; boundary="' + boundary + '"',
-                  'Authorization': 'Bearer ' + token
-                },
-              'data': multipartRequestBody,
-              'success': function (resp) {
-                //var resp = JSON.parse(xhr.responseText);
-                $.post('/api/update/new',
-                  {
-                    filename: resp.title,
-                    path: path,
-                    provider: 'gdrive',
-                    cloudId: resp.id,
-                    size: parseInt(resp.fileSize),
-                    accountId: data.account.id
-                  },
-                  function (data) {
-                    $row.remove();
-                    list();
-                  }
-                );
-              }
-            });
+          var folders = folder.split('/');
+          if (folders[0]) {
+            console.log('not in root.');
+            getParentId(folders, file, data.account, folder, undefined);
+          } else {
+            driveUpload(file, data.account, folder, undefined);
           }
         }
       }
@@ -242,27 +372,20 @@ $(function () {
         var account = data.account;
         var provider = account.provider;
         var token = account.token;
-        if (provider === 'dropbox') {
-          $.post('/api/update/new',
-            {
-              filename: name, // actually folder name
-              isDir: true,
-              path: folder,
-              provider: 'dropbox',
-              cloudId: folder + '/' + name,
-              size: 0,
-              accountId: data.account.id
-            },
-            function (data) {
-              if ($row) {
-                $row.remove();
-              }
-              list();
-            }
-          );
-        } else if (provider === 'gdrive') {
-
-        }
+        $.post('/api/update/new',
+          {
+            filename: name, // actually folder name
+            isDir: true,
+            path: folder,
+            provider: 'dropbox',
+            cloudId: (folder + '/' + name).replace('//', '/'),
+            size: 0,
+            accountId: data.account.id
+          },
+          function (data) {
+            list();
+          }
+        );
       }
     });
   };
@@ -282,9 +405,7 @@ $(function () {
 
   function list() {
     var hashval = window.location.hash.substr(1);
-    console.log('/api/folder/' + hashval);
     $.get('/api/folder/' + hashval, function (data) {
-      console.log(data);
       var files = data.files;
       files = files.sort(function (a,b) {
         return a.name < b.name ? -1 : a.name == b.name ? 0 : 1;
@@ -306,7 +427,7 @@ $(function () {
 
   function renderFileRow(data) {
     var $link = $('<a class="name" />')
-      .attr('href', data.isDir ? '#' + data.path : './' + data.path)
+      .attr('href', data.isDir ? data.path + data.name : './' + data.path)
       .text(data.name);
     var $dl_link = $('<a/>').attr('href', '?do=download&file=' + encodeURIComponent(data.path))
       .addClass('download').text('download');
@@ -315,7 +436,7 @@ $(function () {
       .addClass(data.isDir ? 'isDir' : '')
       .append($('<td class="first" />').append($link))
       .append($('<td/>').attr('data-sort', data.isDir ? -1 : data.size)
-        .html($('<span class="size" />').text(formatFileSize(data.size))))
+        .html($('<span class="size" />').text(data.isDir ? '--' : formatFileSize(data.size))))
       .append($('<td/>').attr('data-sort', data.changeDate).text(formatTimestamp(data.changeDate)))
       .append($('<td/>').append($dl_link).append($delete_link))
     return $html;
@@ -348,4 +469,10 @@ $(function () {
     var d = Math.round(bytes * 10);
     return pos ? [parseInt(d / 10), ".", d % 10, " ", s[pos]].join('') : bytes + ' bytes';
   };
+
+  setInterval(function() {
+    console.log('tick');
+    var path = window.location.hash.replace('//', '/').replace('#', '');
+    list();
+  }, 5000);
 });
