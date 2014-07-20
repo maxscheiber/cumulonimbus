@@ -108,7 +108,24 @@ $(function () {
           }
         });
       } else if (data.status === 'success' && data.file.provider === 'gdrive') {
-        console.log('not done yet');
+        $.ajax({
+          type: 'DELETE',
+          url: 'https://www.googleapis.com/drive/v2/files/' + data.file.cloudId,
+          headers: {'Authorization': 'Bearer ' + data.file.account.oauthToken},
+          success: function(resp) {
+            $.ajax({
+              type: 'POST',
+              url: '/api/update/delete',
+              data: {
+                path: data.file.path,
+                filename: data.file.name
+              },
+              success: function(data) {
+                list();
+              }
+            });
+          }
+        });
       }
     });
     return false;
