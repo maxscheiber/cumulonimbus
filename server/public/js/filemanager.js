@@ -451,7 +451,8 @@ $(function () {
 
   function renderFileRow(data) {
     var $link = $('<a class="name" />')
-      .attr('href', data.isDir ? data.path + data.name : './' + data.path)
+      .attr('href', data.isDir ? data.path + data.name : data.provider === 'dropbox' ?
+        'http://dropbox.com/home' + data.path + data.name : '.' + data.path)
       .text(data.name);
     var $dl_link = $('<a/>').attr('href', '?do=download&file=' + encodeURIComponent(data.path))
       .addClass('download').text('download');
