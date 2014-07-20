@@ -430,14 +430,16 @@ $(function () {
   function list() {
     var hashval = window.location.hash.substr(1);
     $.get('/api/folder/' + hashval, function (data) {
-      var files = data.files;
+      var files = _.uniq(data.files, false, function(item, key, a) {
+        return item.name;
+      });
       files = files.sort(function (a,b) {
         return a.name < b.name ? -1 : a.name == b.name ? 0 : 1;
       });
       $tbody.empty();
       $('#breadcrumb').empty().html(renderBreadcrumbs(hashval));
       if (data.status) {
-        $.each(data.files, function (k, v) {
+        $.each(files, function (k, v) {
           $tbody.append(renderFileRow(v));
         });
         !data.files.length && $tbody.append('<tr><td class="empty" colspan=5>This folder is empty</td</td>')

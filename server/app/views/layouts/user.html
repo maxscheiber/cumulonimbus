@@ -13,6 +13,7 @@
     <link href="/static/css/bootstrap.min.css" rel="stylesheet">
     <link href="/static/css/navbar-fixed-top.css" rel="stylesheet">
     <script src="http://code.jquery.com/jquery-2.1.1.min.js"></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/underscore.js/1.6.0/underscore-min.js"></script>
 
     <!-- HTML5 shim and Respond.js IE8 support of HTML5 elements and media queries -->
     <!--[if lt IE 9]>
@@ -40,12 +41,14 @@
             <li><a href="/contact">Contact</a></li>
             <li>
               <form action="/getmorespace" method="post">
-                <input type="submit" class="form-control btn-warning" style="margin-top: 8px; margin-left: 140px" value="GET MORE SPACE!">
+                <input type="submit" class="form-control btn-warning" style="margin-top: 8px; margin-left: 40px" value="GET MORE SPACE!">
               </form>
             </li>
           </ul>
           <ul class="nav navbar-nav navbar-right">
-            <li class="active"><a href="/logout">Logout</a></li>
+            <li><a href="../navbar/">Default</a></li>
+            <li><a href="../navbar-static-top/">Static top</a></li>
+            <li class="active"><a href="./">Fixed top</a></li>
           </ul>
         </div>
       </div>
