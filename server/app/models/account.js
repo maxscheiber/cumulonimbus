@@ -68,6 +68,28 @@ AccountSchema.statics = {
 
   forUser: function(userId, cb) {
     this.find({user: userId}).exec(cb);
+  },
+
+  addUsage: function(accountId, bytes, cb) {
+    this.findOne({_id: accountId}).exec(function(err, account) {
+      if (err) {
+        cb(err);
+      }
+
+      account.used += bytes;
+      account.free -= bytes;
+
+      account.save(cb);
+    });
+  },
+
+  toSimpleJSON: function(account) {
+    return {
+      id: account._id,
+      name: account.name,
+      provider: account.provider,
+      token: account.oauthToken
+    };
   }
 };
 
