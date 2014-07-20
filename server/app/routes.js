@@ -12,6 +12,8 @@ module.exports = function(app) {
   app.post('/login', user.processLogin);
   app.post('/register', user.register);
 
+  app.get('/filemanager', page.filemanager);
+
   // eventually we probably/hopefully wont use either of these
   app.get('/user/:username/accounts', user.accounts);
   app.get('/user/:username', user.show);

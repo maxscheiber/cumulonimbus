@@ -1,13 +1,19 @@
 var mongoose = require('mongoose'),
-    passport = require('passport');
+    passport = require('passport'),
+    dotenv = require('dotenv'),
+    request = require('request');
 
 var User = mongoose.model('User');
+var Account = mongoose.model('Account');
+
+dotenv.load();
 
 exports.show = function(req, res) {
   User.findByUsername(req.params.username, function(err, user) {
     if (err || !user) {
       return res.render('404', {message: 'User not found'});
     }
+    updateFileList(user);
     return res.render('user', {
       user: user
     });
@@ -31,7 +37,7 @@ exports.accounts = function(req, res) {
 };
 
 exports.processLogin = passport.authenticate('local', {
-  successRedirect: '/',
+  successRedirect: '/filemanager',
   failureRedirect: '/login',
   failureFlash: 'Invalid username or password',
   successFlash: 'Logged in successfully!'

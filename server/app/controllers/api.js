@@ -2,6 +2,7 @@ var mongoose = require('mongoose'),
     passport = require('passport'),
     _ = require('underscore'),
     request = require('request'),
+    async = require('async'),
     dotenv = require('dotenv');
 
 dotenv.load();
@@ -9,6 +10,78 @@ dotenv.load();
 var User = mongoose.model('User');
 var Account = mongoose.model('Account');
 var File = mongoose.model('File');
+
+// Asynchronous DFS over Dropbox
+var dropboxGet = function(path, account) {
+  var options = {
+    url: 'https://api.dropbox.com/1/metadata/auto' + path,
+    form: {
+      'file_limit': 25000,
+      'list': 'true'
+    },
+    headers: {
+      'Authorization': 'Bearer ' + account.oauthToken
+    }
+  };
+
+  request(options, function (err, resp, body) {
+    if (!err) {
+      var data = JSON.parse(body);
+      console.log(body);
+      async.forEach(data.contents, function (entity, cb) {
+        if (entity.is_dir) {
+          console.log(entity.path + ' is a directory, recursing');
+          dropboxGet(entity.path, account);
+        } else {
+          console.log(entity);
+          Account.getMostFree(account.user, function(err, freeAccount) {
+            if (err || !freeAccount) {
+              console.log('Could not add Dropbox file to account');
+              console.log(err);
+              return;
+            } else {
+              console.log('Found file ' + entity.path + ', adding');
+              var path = entity.path.split('/');
+              var filename = path[path.length - 1];
+              var now = Date.now();
+              var size = parseInt(entity.bytes);
+              var file = new File({
+                name: filename,
+                path: entity.path,
+                provider: 'dropbox',
+                cloudId: entity.rev,
+                size: size,
+                user: account.user,
+                account: account._id,
+                createDate: now,
+                changeDate: now
+              });
+
+              file.save(function(err) {
+                if (err) { console.log('error saving file'); return; }
+                account.used += size;
+                account.free -= size;
+                account.save(function (err) {
+                  if (err) { console.log('Error updating account'); }
+                });
+              });
+            }
+          });
+        }
+      }, function(err) {
+
+      });
+    }
+  });
+}
+
+var updateFileList = function(account) {
+  if (account.provider === 'dropbox') {
+    dropboxGet('/', account);
+  } else if (account.provider === 'gdrive') {
+    // gdriveGet('/', account.oauthToken);
+  }
+}
 
 exports.login = function(req, res, next) {
   passport.authenticate('local', function(err, user, info) {
@@ -110,6 +183,9 @@ exports.dropbox = function(req, res, next) {
               console.log(err);
               return res.render('500');
             }
+
+            updateFileList(account);
+
             return res.redirect('/accounts');
           });
         });
@@ -131,8 +207,18 @@ exports.instructionsNew = function(req, res) {
   }
 
   Account.getMostFree(req.user._id, function(err, account) {
+    if (err || !account) {
+      return res.json(403, {
+        status: 'error',
+        message: 'No accounts authenticated'
+      });
+    }
+
     if (account.free < size) {
-      return res.json(403, {error: 'Not enough room'});
+      return res.json(403, {
+        status: 'error',
+        message: 'Not enough room'
+      });
     }
 
     return res.json({
@@ -161,7 +247,7 @@ exports.updateNew = function(req, res) {
   var path = File.normalizePath(post.path);
   var provider = post.provider;
   var cloudId = post.cloudId;
-  var size = post.size;
+  var size = parseInt(post.size);
   var accountId = post.accountId;
   var now = Date.now();
 
@@ -194,7 +280,6 @@ exports.updateNew = function(req, res) {
 
     Account.addUsage(accountId, size, function(err) {
       if (err) {
-        console.log(err)
         return res.json(500, {
           status: 'error',
           message: 'Failed to update space usage'
@@ -206,7 +291,7 @@ exports.updateNew = function(req, res) {
         message: 'File added successfully'
       });
     });
-  })
+  });
 }
 
 exports.updateMove = function(req, res) {

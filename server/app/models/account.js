@@ -72,9 +72,13 @@ AccountSchema.statics = {
 
   addUsage: function(accountId, bytes, cb) {
     this.findOne({_id: accountId}).exec(function(err, account) {
-      // err should never happen hopefully
+      if (err) {
+        cb(err);
+      }
+
       account.used += bytes;
       account.free -= bytes;
+
       account.save(cb);
     });
   },

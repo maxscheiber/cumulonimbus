@@ -93,7 +93,6 @@ FileSchema.statics = {
   }
 };
 
-
 //statics
 
 mongoose.model('File', FileSchema);

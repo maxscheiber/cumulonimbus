@@ -1,4 +1,5 @@
 import logging
+import os
 import time
 
 import dropbox
@@ -10,33 +11,64 @@ from watchdog.observers import Observer
 
 class CumulonimbusFSEventHandler(watchdog.events.FileSystemEventHandler):
 
-    def __init__(self, logger, watch_directory):
+    def __init__(self, logger, watch_directory, cookies):
         super(CumulonimbusFSEventHandler, self).__init__()
         self.logger = logger
-        # USE REQUESTS TO GET TOKENS
-        dropbox_access_token = 'mDjIFTg3VrUAAAAAAAAABez1I9Q7RGLhOScZQjDo9EdB1x4RK0tMCV7cwaMQzOfq'
-        self.dropbox_client = dropbox.client.DropboxClient(dropbox_access_token)
         self.watch_directory = watch_directory
+        self.cookies = cookies
 
     # call hook to add file
     def on_created(self, event):
         super(CumulonimbusFSEventHandler, self).on_created(event)
-        # USE REQUESTS TO CALL HOOK
         try:
+            params = dict(size=os.path.getsize(event.src_path))
+            r = requests.post('http://localhost:8080/api/instructions/new',
+                              params=params, cookies=self.cookies)
+            if 'account' not in r.json():
+               self.logger.error("COULD NOT CREATE FILE")
+               return
+            provider = r.json()['account']['provider']
+            account_id = r.json()['account']['id']
+            dropbox_client = dropbox.client.DropboxClient(r.json()['account']['token'])
             file_name = event.src_path[len(self.watch_directory):]
             path_to_dropbox_file = file_name
-            response = self.dropbox_client.put_file(path_to_dropbox_file, event.src_path)
+            response = dropbox_client.put_file(path_to_dropbox_file, event.src_path)
+            file_path, upload_path = self._get_file_name_and_upload_path(file_name)
+            rev = response['rev']
+            update_params=dict(filename=file_path,
+                               path=upload_path,
+                               provider=provider,
+                               cloudId=rev,
+                               size=response['bytes'],
+                               accountId=account_id)
+            self.logger.debug(update_params)
+            r = requests.post('http://localhost:8080/api/update/new',
+                              params=params,
+                              cookies=self.cookies)
+            self.logger.debug(r.text)
         except Exception as e:
             self.logger.exception("OOPS")
 
     # call hook to delete file
     def on_deleted(self, event):
         super(CumulonimbusFSEventHandler, self).on_deleted(event)
-        # USE REQUESTS TO CALL HOOK
         try:
             file_name = event.src_path[len(self.watch_directory):]
             path_to_dropbox_file = file_name
-            response = self.dropbox_client.file_delete(path_to_dropbox_file)
+            file_path, upload_path = self._get_file_name_and_upload_path(file_name)
+            # TODO(ashu): update params
+            delete_params = dict(filename=file_path, path=upload_path)
+            r = requests.post('http://localhost:8080/api/instructions/delete',
+                              params=delete_params,
+                              cookies=self.cookies)
+            response_json = r.json()
+            if 'account' not in response_json:
+                self.logger.error("COULD NOT DELETE FILE")
+                return
+            provider = response_json['account']['provider']
+            dropbox_client = dropbox.client.DropboxClient(response_json['account']['token'])
+            response = dropbox_client.file_delete(path_to_dropbox_file)
+            # TODO(ashu): update delete endpoint call
         except Exception as e:
             self.logger.exception("OOPS")
 
@@ -48,10 +80,53 @@ class CumulonimbusFSEventHandler(watchdog.events.FileSystemEventHandler):
         except Exception as e:
             self.logger.exception("OOPS")
 
+    def on_modified(self, event):
+        try:
+            params = dict(size=os.path.getsize(event.src_path))
+            r = requests.post('http://localhost:8080/api/instructions/modify',
+                              params=params, cookies=self.cookies)
+            if 'account' not in r.json():
+               self.logger.error("COULD NOT MODIFY FILE")
+               return
+            provider = r.json()['account']['provider']
+            account_id = r.json()['account']['id']
+            dropbox_client = dropbox.client.DropboxClient(r.json()['account']['token'])
+            file_name = event.src_path[len(self.watch_directory):]
+            path_to_dropbox_file = file_name
+            response = dropbox_client.put_file(path_to_dropbox_file, event.src_path, overwrite=True)
+            file_path, upload_path = self._get_file_name_and_upload_path(file_name)
+            rev = response['rev']
+            update_params=dict(filename=file_path,
+                               path=upload_path,
+                               provider=provider,
+                               cloudId=rev,
+                               size=response['bytes'],
+                               accountId=account_id)
+            self.logger.debug(update_params)
+            r = requests.post('http://localhost:8080/api/update/modify',
+                              params=params,
+                              cookies=self.cookies)
+            self.logger.debug(r.text)
+        except Exception as e:
+            self.logger.exception("OOPS")
+
+
+    def _get_file_name_and_upload_path(self, file_name):
+        if not event.is_directory:
+            upload_path = '/'.join(file_name.split('/')[:-1])
+            if upload_path == '':
+                upload_path = '/'
+            file_path = file_name.split('/')[-1]
+        else:
+            upload_path = file_name
+            file_path = ''
+        return file_path, upload_path
+
+
 
 
 class FileWatcher(object):
-    def __init__(self, watch_directory, logger=None):
+    def __init__(self, watch_directory, logger=None, cookies=None):
         self.watch_directory = watch_directory
         if logger:
             self.logger = logger
@@ -66,13 +141,16 @@ class FileWatcher(object):
             fh.setLevel(logging.DEBUG)
             fh.setFormatter(formatter)
             self.logger.addHandler(fh)
-        self.event_handler = CumulonimbusFSEventHandler(self.logger, self.watch_directory)
+        self.cookies = cookies
+        self.event_handler = CumulonimbusFSEventHandler(logger=self.logger,
+                                                        watch_directory=self.watch_directory,
+                                                        cookies=self.cookies)
 
     def start(self):
-
         self.observer = Observer()
         self.observer.schedule(self.event_handler, self.watch_directory, recursive=True)
         self.observer.start()
+
         try:
             while True:
                 time.sleep(1)
