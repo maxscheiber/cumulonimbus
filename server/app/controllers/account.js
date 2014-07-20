@@ -51,13 +51,13 @@ exports.create = function(req, res) {
       return res.redirect('/account/new');
     }
 
-    req.user.addAccount(account._id);
     // add account to user account list
+    req.user.addAccount(account._id);
     // TODO: generic URL, not localhost
     if (provider === 'dropbox') {
-      return res.redirect('https://www.dropbox.com/1/oauth2/authorize' + 
-            '?client_id=' + process.env.DROPBOX_KEY + 
-            '&response_type=code&redirect_uri=http://localhost:8080/dropbox' + 
+      return res.redirect('https://www.dropbox.com/1/oauth2/authorize' +
+            '?client_id=' + process.env.DROPBOX_KEY +
+            '&response_type=code&redirect_uri=http://localhost:8080/dropbox' +
             '&state=' + account._id);
     }
   })

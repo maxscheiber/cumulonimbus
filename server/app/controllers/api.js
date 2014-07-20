@@ -32,26 +32,44 @@ exports.login = function(req, res, next) {
   })(req, res, next);
 };
 
-exports.pathListing = function(req, res) {
-  return res.json({message: 'not completed yet'})
+function outputFiles(res) {
+  return function(err, files) {
+    if (err) {
+      return res.json(404, {
+        status: 'error',
+        message: 'Failed to fetch files'
+      })
+    }
+
+    return res.json({
+      status: 'success',
+      files: _.map(files, File.toSimpleJSON)
+    });
+  }
 }
 
-function reduceAccount(account) {
-  return {
-    id: account._id,
-    name: account.name,
-    provider: account.provider,
-    token: account.oauthToken
-  };
+exports.pathListing = function(req, res) {
+  var path = File.normalizePath(req.params[0]);
+
+  console.log('getting listing for path ' + path);
+
+  File.forUserPath(path, req.user._id, outputFiles(res));
+}
+
+exports.treeListing = function(req, res) {
+  File.forUser(req.user._id, outputFiles(res));
 }
 
 exports.accounts = function(req, res) {
   User.load(req.user.username, function(err, user) {
     if (err) {
-      return res.json(404, {message: 'User not found'});
+      return res.json(404, {
+        status: 'error',
+        message: 'User not found'
+      });
     }
 
-    accounts = _.map(user.accounts, reduceAccount);
+    accounts = _.map(user.accounts, Account.toSimpleJson);
 
     return res.json({
       status: 'success',
@@ -92,13 +110,7 @@ exports.dropbox = function(req, res, next) {
               console.log(err);
               return res.render('500');
             }
-            return res.render('accounts', {
-              user: req.user,
-              accounts: req.user.accounts,
-              partials: {
-                account: 'partials/account'
-              }
-            });
+            return res.redirect('/accounts');
           });
         });
       } else {
@@ -109,11 +121,17 @@ exports.dropbox = function(req, res, next) {
 }
 
 exports.instructionsNew = function(req, res) {
-  var post = req.body;
-  var size = post.size;
+  var size = req.body.size;
+
+  if (!size) {
+    return res.json(403, {
+      status: 'error',
+      message: 'Please provide a size'
+    })
+  }
 
   Account.getMostFree(req.user._id, function(err, account) {
-    if (account.free < post.size) {
+    if (account.free < size) {
       return res.json(403, {error: 'Not enough room'});
     }
 
@@ -140,7 +158,7 @@ exports.updateNew = function(req, res) {
   var post = req.body;
 
   var filename = post.filename;
-  var path = post.path;
+  var path = File.normalizePath(post.path);
   var provider = post.provider;
   var cloudId = post.cloudId;
   var size = post.size;
@@ -174,9 +192,19 @@ exports.updateNew = function(req, res) {
       });
     }
 
-    return res.json({
-      status: 'success',
-      message: 'File added successfully'
+    Account.addUsage(accountId, size, function(err) {
+      if (err) {
+        console.log(err)
+        return res.json(500, {
+          status: 'error',
+          message: 'Failed to update space usage'
+        });
+      }
+
+      return res.json({
+        status: 'success',
+        message: 'File added successfully'
+      });
     });
   })
 }

@@ -12,9 +12,11 @@ module.exports = function(app) {
   app.post('/login', user.processLogin);
   app.post('/register', user.register);
 
+  // eventually we probably/hopefully wont use either of these
   app.get('/user/:username/accounts', user.accounts);
   app.get('/user/:username', user.show);
 
+  app.get('/accounts', auth.requireLogin, user.accounts);
   app.get('/account/new', auth.requireLogin, account.create);
   app.post('/account/new', account.create);
   app.get('/account/:account', account.show);
@@ -22,7 +24,8 @@ module.exports = function(app) {
   app.get('/dropbox', api.dropbox);
 
   app.post('/api/login', api.login)
-  app.get('/api/folder/:path', auth.apiLogin, api.pathListing);
+  app.get('/api/tree', auth.apiLogin, api.treeListing);
+  app.get(/^\/api\/folder\/(.*)/, auth.apiLogin, api.pathListing);
   app.get('/api/accounts', auth.apiLogin, api.accounts);
   app.post('/api/instructions/new', auth.apiLogin, api.instructionsNew);
   app.post('/api/instructions/move', auth.apiLogin, api.instructionsMove);
