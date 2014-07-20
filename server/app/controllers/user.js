@@ -74,7 +74,7 @@ exports.register = function(req, res) {
           // this should never happen...classic line right
           console.log('wtf failed to login');
         }
-        return res.redirect('/user/' + user.username);
+        return res.redirect('/');
       });
     }
   });
