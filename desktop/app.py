@@ -5,7 +5,6 @@ import signal
 import sys
 import time
 
-from daemonize import Daemonize
 import requests
 from watchdog.events import LoggingEventHandler
 from watchdog.observers import Observer
@@ -39,7 +38,7 @@ if __name__ == '__main__':
         print 'Invalid username and/or password.'
         sys.exit(1)
     cookies = r.cookies
-    watch_path = sys.argv[1]
+    watch_path = os.path.abspath(sys.argv[1])
     formatter = logging.Formatter(
         "%(asctime)s %(threadName)-11s %(levelname)-10s %(message)s")
     logger.setLevel(logging.DEBUG)
