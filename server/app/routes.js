@@ -10,7 +10,9 @@ module.exports = function(app) {
   app.get('/login', page.login);
   app.get('/logout', page.logout);
 
-  app.post('/api/login', api.login)
+  app.post('/api/login', api.login);
+
+  app.get('/dropbox', api.dropbox);
 
   //app.get('/api/folder/:path', auth.apiLogin, api.pathListing);
   app.get('/api/tokens', auth.apiLogin, api.tokens);

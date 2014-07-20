@@ -102,35 +102,46 @@ $(function () {
   });
 
   function uploadFile(file) {
+    // what even is this
     var folder = window.location.hash.substr(1);
 
-    if (file.size > MAX_UPLOAD_SIZE) {
+    /*if (file.size > MAX_UPLOAD_SIZE) {
       var $error_row = renderFileSizeErrorRow(file, folder);
       $('#upload_progress').append($error_row);
       window.setTimeout(function () {
         $error_row.fadeOut();
       }, 5000);
       return false;
-    }
+    }*/
 
-    var $row = renderFileUploadRow(file, folder);
-    $('#upload_progress').append($row);
-    var fd = new FormData();
-    fd.append('file_data', file);
-    fd.append('file', folder);
-    fd.append('xsrf', XSRF);
-    var xhr = new XMLHttpRequest();
-    xhr.open('POST', '/upload');
-    xhr.onload = function () {
-      $row.remove();
-      list();
-    };
-    xhr.upload.onprogress = function (e) {
-      if (e.lengthComputable) {
-        $row.find('.progress').css('width', (e.loaded / e.total * 100 | 0) + '%');
+    // TODO; add session ID
+    $.post('/api/instructions', {'size': file.size}, function (data) {
+      console.log(data);
+      if (!data.success) {
+        // not enough space, handle gracefully or something like that
+      } else {
+        // figure out provider and whatnot
+
+        var $row = renderFileUploadRow(file, folder);
+        $('#upload_progress').append($row);
+        var fd = new FormData();
+        fd.append('file_data', file);
+        fd.append('file', folder);
+        fd.append('xsrf', XSRF);
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', '/upload');
+        xhr.onload = function () {
+          $row.remove();
+          list();
+        };
+        xhr.upload.onprogress = function (e) {
+          if (e.lengthComputable) {
+            $row.find('.progress').css('width', (e.loaded / e.total * 100 | 0) + '%');
+          }
+        };
+        xhr.send(fd);
       }
-    };
-    xhr.send(fd);
+    );
   };
 
   function renderFileUploadRow(file, folder) {
