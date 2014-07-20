@@ -67,6 +67,12 @@ FileSchema.statics = {
     .exec(cb);
   },
 
+  inFolder: function(path, userId, cb) {
+    var pathRegex = new RegExp('^' + path.replace(/\//, '\/'));
+    console.log(pathRegex);
+    this.find({user: userId, path: {$regex: pathRegex}}).exec(cb);
+  },
+
   toSimpleJSON: function(file) {
     return {
       isDir: file.name === '',
@@ -76,7 +82,7 @@ FileSchema.statics = {
       cloudId: file.cloudId,
       size: file.size,
       account: file.accountId,
-      changeDate: file.changeDate
+      changeDate: file.changeDate.getTime()
     };
   },
 
@@ -90,7 +96,14 @@ FileSchema.statics = {
     }
 
     return path
+  },
+
+  moveFolder: function(path, newPath) {
+    // get all with path prefix
+    // needs to do prefix:path
+    File.update({path: path}, {path: newPath})
   }
+
 };
 
 //statics

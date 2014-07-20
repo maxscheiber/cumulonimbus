@@ -126,14 +126,16 @@ function outputFiles(res) {
 
 exports.pathListing = function(req, res) {
   var path = File.normalizePath(req.params[0]);
-
-  console.log('getting listing for path ' + path);
-
   File.forUserPath(path, req.user._id, outputFiles(res));
 }
 
 exports.treeListing = function(req, res) {
-  File.forUser(req.user._id, outputFiles(res));
+  var path = File.normalizePath(req.params[0]);
+  if (path === '/') {
+    File.forUser(req.user._id, outputFiles(res));
+  } else {
+    File.inFolder(path, req.user._id, outputFiles(res));
+  }
 }
 
 exports.accounts = function(req, res) {
@@ -290,7 +292,7 @@ exports.gdrive = function(req, res, next) {
 exports.instructionsNew = function(req, res) {
   var size = req.body.size;
 
-  if (!size) {
+  if (!size && size !== 0) {
     return res.json(403, {
       status: 'error',
       message: 'Please provide a size'
@@ -320,6 +322,7 @@ exports.instructionsNew = function(req, res) {
 }
 
 exports.instructionsMove = function(req, res) {
+  // maybe doesnt need instructions?
   return res.json({message: 'not done yet'});
 }
 
@@ -386,13 +389,35 @@ exports.updateNew = function(req, res) {
 }
 
 exports.updateMove = function(req, res) {
-  return res.json({message: 'not done yet'});
+  var post = req.body;
+
+  var filename = post.filename;
+  var path = File.normalizePath(post.path);
+
+  var newFilename = post.newFilename;
+  var newPath = File.normalizePath(post.newPath);
+
+  if (filename === '') {
+    File.moveFolder(path, newPath);
+  } else {
+    File.update(
+      {path: path, filename: filename},
+      {path: newPath, filename: newFilename, changeDate: Date.now()}
+    );
+  }
 }
 
 exports.updateModify = function(req, res) {
+
   return res.json({message: 'not done yet'});
 }
 
 exports.updateDelete = function(req, res) {
+  var post = req.body;
+
+  var filename = post.filename;
+  var path = File.normalizePath(post.path);
+
+
   return res.json({message: 'not done yet'});
 }
