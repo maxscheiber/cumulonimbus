@@ -38,6 +38,7 @@ exports.create = function(req, res) {
     'user': req.user._id,
     'provider': provider,
     'capacity': 2*1024*1024*1024,
+    'free': 2*1024*1024*1024,
     'used': 0,
     'priority': 1,
     'createDate': Date.now()

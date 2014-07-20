@@ -109,10 +109,11 @@ exports.dropbox = function(req, res, next) {
 }
 
 exports.instructionsNew = function(req, res) {
-  var size = req.body.size;
+  var post = req.body;
+  var size = post.size;
 
   Account.getMostFree(req.user._id, function(err, account) {
-    if (account.free < body.size) {
+    if (account.free < post.size) {
       return res.json(403, {error: 'Not enough room'});
     }
 
