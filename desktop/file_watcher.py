@@ -3,6 +3,7 @@ import httplib2
 import json
 import logging
 import os
+import shutil
 import signal
 import time
 
@@ -27,7 +28,7 @@ class CumulonimbusFSEventHandler(watchdog.events.FileSystemEventHandler):
         self._create_accounts_map()
         self._sync_filesystem()
         signal.signal(signal.SIGALRM, self._sync_handler)
-        signal.alarm(10)
+        signal.alarm(5)
 
     def _create_accounts_map(self):
         r = requests.get('http://localhost:8080/api/accounts', cookies=self.cookies)
@@ -70,8 +71,11 @@ class CumulonimbusFSEventHandler(watchdog.events.FileSystemEventHandler):
         change_times_file = open(os.path.join(self.watch_directory, 'change_times.txt'), 'w')
         files = response_json['files']
         for f in files:
+            if f['isDir']:
+                continue
             provider = f['provider']
             account_id = f['account']
+            f['path'] = f['path'].replace('//', '/')
             file_path = os.path.join(self.watch_directory, f['path'][1:], f['name'])
             self.logger.debug(file_path)
             fs_path = f['path'] + f['name']
@@ -100,20 +104,27 @@ class CumulonimbusFSEventHandler(watchdog.events.FileSystemEventHandler):
         change_times_file.close()
 
     def _sync_handler(self, signum, frame):
+        self._create_accounts_map()
         self._sync_filesystem_timer()
-        signal.alarm(10)
+        signal.alarm(5)
 
     def _sync_filesystem_timer(self):
         r = requests.get('http://localhost:8080/api/tree/', cookies=self.cookies)
         response_json = r.json()
         change_times_file = open(os.path.join(self.watch_directory, 'change_times.txt'), 'w')
         files = response_json['files']
+        all_files = self.change_map.keys()
+        new_files = []
         for f in files:
+            if f['isDir']:
+                continue
             provider = f['provider']
             account_id = f['account']
+            f['path'] = f['path'].replace('//', '/')
             file_path = os.path.join(self.watch_directory, f['path'][1:], f['name'])
             self.logger.debug(file_path)
             fs_path = f['path'] + f['name']
+            new_files.append(fs_path)
             if self.change_map[fs_path] < long(f['changeDate']):
                 if not os.path.exists(os.path.dirname(file_path)):
                     os.makedirs(os.path.dirname(file_path))
@@ -137,6 +148,16 @@ class CumulonimbusFSEventHandler(watchdog.events.FileSystemEventHandler):
             change_times_file.write(fs_path + '\t' + str(f['changeDate']) + '\n')
             self.names_to_ids[file_path] = f['cloudId']
         change_times_file.close()
+
+        s = set(new_files)
+        files_to_remove = [f for f in all_files if f not in s]
+        for f in files_to_remove:
+            full_path = os.path.join(self.watch_directory, f[1:])
+            if os.path.exists(full_path):
+                if os.path.isdir(full_path):
+                    shutil.rmtree(path=full_path)
+                else:
+                    os.remove(full_path)
 
     # call hook to add file
     def on_created(self, event):
@@ -212,6 +233,7 @@ class CumulonimbusFSEventHandler(watchdog.events.FileSystemEventHandler):
         super(CumulonimbusFSEventHandler, self).on_deleted(event)
         try:
             file_name = event.src_path[len(self.watch_directory):]
+            self.change_map.pop(file_name, None)
             file_path, upload_path = self._get_file_name_and_upload_path(event, file_name)
             delete_params = dict(name=file_path, path=upload_path)
             headers = {'Content-type': 'application/json', 'Accept': 'text/plain'}
@@ -220,11 +242,14 @@ class CumulonimbusFSEventHandler(watchdog.events.FileSystemEventHandler):
                               headers=headers,
                               cookies=self.cookies)
             response_json = r.json()
-            if 'account' not in response_json:
+            if response_json == 500:
+                return
+            self.logger.debug(response_json)
+            if 'file' not in response_json:
                 self.logger.error("COULD NOT DELETE FILE")
                 return
-            provider = response_json['account']['provider']
-            account_id = response_json['account']['id']
+            provider = response_json['file']['account']['provider']
+            account_id = response_json['file']['account']['_id']
             file_name = event.src_path[len(self.watch_directory):]
             if provider == 'dropbox':
                 dropbox_client = self.dropbox_clients[account_id]
@@ -238,7 +263,7 @@ class CumulonimbusFSEventHandler(watchdog.events.FileSystemEventHandler):
                                             is_directory=event.is_directory)
             elif provider == 'gdrive':
                 gdrive_client = self.gdrive_clients[account_id]
-                res = gdrive_client.files().delete(fileId=response_json['account']['cloudId'])
+                res = gdrive_client.files().delete(fileId=response_json['file']['cloudId'])
             update_params=dict(filename=file_path,
                                path=upload_path,
                                isDir=event.is_directory)
