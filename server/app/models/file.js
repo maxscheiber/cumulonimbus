@@ -127,7 +127,7 @@ FileSchema.statics = {
 
   toSimpleJSON: function(file) {
     return {
-      isDir: file.name === '',
+      isDir: file.isDir,
       name: file.name,
       path: file.path,
       provider: file.provider,
