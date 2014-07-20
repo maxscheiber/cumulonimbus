@@ -132,23 +132,6 @@ $(function () {
         var xhr = new XMLHttpRequest();
 
         if (provider === 'dropbox') {
-          /*xhr.onreadystatechange = function() {
-            if (xhr.readyState === 4 && xhr.status === 200) { 
-              var resp = JSON.parse(xhr.responseText);
-              $.post('/api/update/new',
-                {
-                  filename: file.name,
-                  path: resp.path,
-                  provider: 'dropbox',
-                  cloudId: resp.rev,
-                  size: resp.bytes,
-                  accountId: data.account.id
-                },
-                function (data) {}
-              );
-            }
-          }*/
-
           xhr.open('PUT', 'https://api-content.dropbox.com/1/files_put/auto/' +
             folder + '/' + file.name);
           xhr.setRequestHeader('Authorization', 'Bearer ' + token);
@@ -163,11 +146,11 @@ $(function () {
                 size: resp.bytes,
                 accountId: data.account.id
               },
-              function (data) {}
+              function (data) {
+                $row.remove();
+                list();
+              }
             );
-
-            $row.remove();
-            list();
           };
           xhr.upload.onprogress = function (e) {
             if (e.lengthComputable) {
@@ -232,6 +215,10 @@ $(function () {
     console.log('/api/folder/' + hashval);
     $.get('/api/folder/' + hashval, function (data) {
       console.log(data);
+      var files = data.files;
+      files = files.sort(function (a,b) {
+        return a.name < b.name ? -1 : a.name == b.name ? 0 : 1;
+      });
       $tbody.empty();
       $('#breadcrumb').empty().html(renderBreadcrumbs(hashval));
       if (data.status) {
@@ -259,7 +246,7 @@ $(function () {
       .append($('<td class="first" />').append($link))
       .append($('<td/>').attr('data-sort', data.isDir ? -1 : data.size)
         .html($('<span class="size" />').text(formatFileSize(data.size))))
-      .append($('<td/>').attr('data-sort', data.mtime).text(formatTimestamp(data.mtime)))
+      .append($('<td/>').attr('data-sort', data.changeDate).text(formatTimestamp(data.changeDate)))
       .append($('<td/>').append($dl_link).append($delete_link))
     return $html;
   };
@@ -279,7 +266,7 @@ $(function () {
 
   function formatTimestamp(unix_timestamp) {
     var m = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    var d = new Date(unix_timestamp * 1000);
+    var d = new Date(unix_timestamp);
     return [m[d.getMonth()], ' ', d.getDate(), ', ', d.getFullYear(), " ", (d.getHours() % 12 || 12), ":", (d.getMinutes() < 10 ? '0' : '') + d.getMinutes(),
       " ", d.getHours() >= 12 ? 'PM' : 'AM'
     ].join('');
