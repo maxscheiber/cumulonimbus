@@ -113,6 +113,10 @@ exports.instructionsNew = function(req, res) {
   var size = post.size;
 
   Account.getMostFree(req.user._id, function(err, account) {
+    if (err || !account) {
+      return res.json(403, {error: 'No accounts authenticated'});
+    }
+
     if (account.free < post.size) {
       return res.json(403, {error: 'Not enough room'});
     }
@@ -143,7 +147,7 @@ exports.updateNew = function(req, res) {
   var path = post.path;
   var provider = post.provider;
   var cloudId = post.cloudId;
-  var size = post.size;
+  var size = parseInt(post.size);
   var accountId = post.accountId;
   var now = Date.now();
 
@@ -174,9 +178,29 @@ exports.updateNew = function(req, res) {
       });
     }
 
-    return res.json({
-      status: 'success',
-      message: 'File added successfully'
+    Account.load(accountId, function (err, account) {
+      if (err || !account) {
+        return res.json(500, {
+          status: 'error',
+          message: 'Could not update account info'
+        });
+      }
+
+      // Should not require a safety check, but we may put one in for the lulz
+      account.used += size;
+      account.free -= size;
+      account.save(function (err) {
+        if (err) {
+          return res.json(500, {
+            status: 'error',
+            message: 'Could not update account info'
+          });
+        }
+        return res.json({
+          status: 'success',
+          message: 'File added successfully'
+        });
+      });
     });
   })
 }

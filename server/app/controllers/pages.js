@@ -9,6 +9,17 @@ exports.index = function(req, res) {
   }
 };
 
+// TODO; update file manager from all of user's accounts
+exports.filemanager = function(req, res) {
+  if (req.user) {
+    return res.render('filemanager', {
+      user: req.user
+    });
+  } else {
+    return res.render('landing');
+  }
+}
+
 exports.about = function(req, res) {
   return res.render('about');
 };

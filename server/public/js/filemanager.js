@@ -1,52 +1,52 @@
-(function ($) {
-  $.fn.tablesorter = function () {
-    var $table = this;
-    this.find('th').click(function () {
-      var idx = $(this).index();
-      var direction = $(this).hasClass('sort_asc');
-      $table.tablesortby(idx, direction);
-    });
-    return this;
-  };
-
-  $.fn.tablesortby = function (idx, direction) {
-    var $rows = this.find('tbody tr');
-
-    function elementToVal(a) {
-      var $a_elem = $(a).find('td:nth-child(' + (idx + 1) + ')');
-      var a_val = $a_elem.attr('data-sort') || $a_elem.text();
-      return (a_val == parseInt(a_val) ? parseInt(a_val) : a_val);
-    }
-    $rows.sort(function (a, b) {
-      var a_val = elementToVal(a),
-        b_val = elementToVal(b);
-      return (a_val > b_val ? 1 : (a_val == b_val ? 0 : -1)) * (direction ? 1 : -1);
-    })
-    this.find('th').removeClass('sort_asc sort_desc');
-    $(this).find('thead th:nth-child(' + (idx + 1) + ')').addClass(direction ? 'sort_desc' : 'sort_asc');
-    for (var i = 0; i < $rows.length; i++)
-      this.append($rows[i]);
-    this.settablesortmarkers();
-    return this;
-  };
-
-  $.fn.retablesort = function () {
-    var $e = this.find('thead th.sort_asc, thead th.sort_desc');
-    if ($e.length)
-      this.tablesortby($e.index(), $e.hasClass('sort_desc'));
-
-    return this;
-  };
-
-  $.fn.settablesortmarkers = function () {
-    this.find('thead th span.indicator').remove();
-    this.find('thead th.sort_asc').append('<span class="indicator">&darr;<span>');
-    this.find('thead th.sort_desc').append('<span class="indicator">&uarr;<span>');
-    return this;
-  };
-})(jQuery);
-
 $(function () {
+  (function ($) {
+    $.fn.tablesorter = function () {
+      var $table = this;
+      this.find('th').click(function () {
+        var idx = $(this).index();
+        var direction = $(this).hasClass('sort_asc');
+        $table.tablesortby(idx, direction);
+      });
+      return this;
+    };
+
+    $.fn.tablesortby = function (idx, direction) {
+      var $rows = this.find('tbody tr');
+
+      function elementToVal(a) {
+        var $a_elem = $(a).find('td:nth-child(' + (idx + 1) + ')');
+        var a_val = $a_elem.attr('data-sort') || $a_elem.text();
+        return (a_val == parseInt(a_val) ? parseInt(a_val) : a_val);
+      }
+      $rows.sort(function (a, b) {
+        var a_val = elementToVal(a),
+          b_val = elementToVal(b);
+        return (a_val > b_val ? 1 : (a_val == b_val ? 0 : -1)) * (direction ? 1 : -1);
+      })
+      this.find('th').removeClass('sort_asc sort_desc');
+      $(this).find('thead th:nth-child(' + (idx + 1) + ')').addClass(direction ? 'sort_desc' : 'sort_asc');
+      for (var i = 0; i < $rows.length; i++)
+        this.append($rows[i]);
+      this.settablesortmarkers();
+      return this;
+    };
+
+    $.fn.retablesort = function () {
+      var $e = this.find('thead th.sort_asc, thead th.sort_desc');
+      if ($e.length)
+        this.tablesortby($e.index(), $e.hasClass('sort_desc'));
+
+      return this;
+    };
+
+    $.fn.settablesortmarkers = function () {
+      this.find('thead th span.indicator').remove();
+      this.find('thead th.sort_asc').append('<span class="indicator">&darr;<span>');
+      this.find('thead th.sort_desc').append('<span class="indicator">&uarr;<span>');
+      return this;
+    };
+  })(jQuery);
+
   var XSRF = (document.cookie.match('(^|; )_sfm_xsrf=([^;]*)') || 0)[2];
   var MAX_UPLOAD_SIZE = 10 * 1000 * 1000;
   var $tbody = $('#list');
@@ -54,16 +54,19 @@ $(function () {
   $('#table').tablesorter();
 
   $('#list').on('click', '.delete', function (data) {
-    $.post('/delete', {
+    $.post('/api/instructions/delete', {
       // TODO: should be based on absolute path, or file ID
       file: $(this).attr('data-file'),
       xsrf: XSRF
     }, function (response) {
+      // TODO: figure out where to delete from
       list();
     }, 'json');
     return false;
   });
 
+  // TODO: this needs to actually not post to the server and just make a directory
+  // locally
   $('#mkdir').submit(function (e) {
     var hashval = window.location.hash.substr(1),
       $dir = $(this).find('[name=name]');
@@ -115,33 +118,50 @@ $(function () {
     }*/
 
     // TODO; add session ID
-    $.post('/api/instructions', {'size': file.size}, function (data) {
-      console.log(data);
-      if (!data.success) {
+    $.post('/api/instructions/new', {'size': file.size}, function (data) {
+      if (data.error) {
         // not enough space, handle gracefully or something like that
       } else {
         // figure out provider and whatnot
-
-        var $row = renderFileUploadRow(file, folder);
-        $('#upload_progress').append($row);
-        var fd = new FormData();
-        fd.append('file_data', file);
-        fd.append('file', folder);
-        fd.append('xsrf', XSRF);
-        var xhr = new XMLHttpRequest();
-        xhr.open('POST', '/upload');
-        xhr.onload = function () {
-          $row.remove();
-          list();
-        };
-        xhr.upload.onprogress = function (e) {
-          if (e.lengthComputable) {
-            $row.find('.progress').css('width', (e.loaded / e.total * 100 | 0) + '%');
+        var account = data.account;
+        var provider = account.provider;
+        var token = account.token;
+        if (provider === 'dropbox') {
+          var $row = renderFileUploadRow(file, folder);
+          $('#upload_progress').append($row);
+          var xhr = new XMLHttpRequest();
+          xhr.onreadystatechange = function() {
+            if (xhr.readyState === 4 && xhr.status === 200) { 
+              var resp = JSON.parse(xhr.responseText);
+              $.post('/api/update/new',
+                {
+                  filename: file.name,
+                  path: resp.path,
+                  provider: 'dropbox',
+                  cloudId: resp.rev,
+                  size: resp.bytes,
+                  accountId: data.account.id
+                },
+                function (data) {}
+              );
+            }
           }
-        };
-        xhr.send(fd);
+          xhr.open('PUT', 'https://api-content.dropbox.com/1/files_put/auto/' +
+            folder + '/' + file.name);
+          xhr.setRequestHeader('Authorization', 'Bearer ' + token);
+          xhr.onload = function () {
+            $row.remove();
+            list();
+          };
+          xhr.upload.onprogress = function (e) {
+            if (e.lengthComputable) {
+              $row.find('.progress').css('width', (e.loaded / e.total * 100 | 0) + '%');
+            }
+          };
+          xhr.send(file);
+        }
       }
-    );
+    });
   };
 
   function renderFileUploadRow(file, folder) {
@@ -159,7 +179,7 @@ $(function () {
 
   function list() {
     var hashval = window.location.hash.substr(1);
-    $.get('list', {
+    $.get('/api/folder/', {
       // TODO: what even is hashval
       'file': hashval
     }, function (data) {

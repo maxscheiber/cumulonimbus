@@ -31,7 +31,7 @@ exports.accounts = function(req, res) {
 };
 
 exports.processLogin = passport.authenticate('local', {
-  successRedirect: '/',
+  successRedirect: '/filemanager',
   failureRedirect: '/login',
   failureFlash: 'Invalid username or password',
   successFlash: 'Logged in successfully!'
