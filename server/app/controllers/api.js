@@ -60,7 +60,7 @@ var dropboxGet = function(path, account) {
 
           File.makeFile(new File({
             name: filename,
-            path: File.normalizePath(pathName),
+            path: File.normalizePath(pathName.replace('//', '/')),
             provider: 'dropbox',
             cloudId: entity.rev,
             size: size,
@@ -112,7 +112,7 @@ var gdriveGet = function(path, account, folderId) {
           var size = parseInt(driveFile.fileSize);
           File.makeFile(new File({
             name: driveFile.title,
-            path: File.normalizePath(path),
+            path: File.normalizePath(path.replace('//', '/')),
             provider: 'gdrive',
             cloudId: driveFile.id,
             size: size,
