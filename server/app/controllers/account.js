@@ -29,6 +29,10 @@ exports.create = function(req, res) {
     return res.redirect('/account/new');
   }
 
+  if (provider !== 'dropbox' && provider !== 'gdrive') {
+    return res.redirect('/account/new');
+  }
+
   var account = new Account({
     'name': name,
     'user': req.user._id,
@@ -49,9 +53,11 @@ exports.create = function(req, res) {
     req.user.addAccount(account._id);
     // add account to user account list
     // TODO: generic URL, not localhost
-    return res.redirect('https://www.dropbox.com/1/oauth2/authorize' + 
-          '?client_id=' + process.env.DROPBOX_KEY + 
-          '&response_type=code&redirect_uri=http://localhost:8080/dropbox' + 
-          '&state=' + account._id);
+    if (provider === 'dropbox') {
+      return res.redirect('https://www.dropbox.com/1/oauth2/authorize' + 
+            '?client_id=' + process.env.DROPBOX_KEY + 
+            '&response_type=code&redirect_uri=http://localhost:8080/dropbox' + 
+            '&state=' + account._id);
+    }
   })
 };
