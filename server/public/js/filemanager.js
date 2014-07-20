@@ -60,6 +60,31 @@ $(function () {
     list();
   });
 
+  $('#list').on('click', '.download', function(e) {
+    e.preventDefault();
+    var path = window.location.hash ? window.location.hash.replace('#', '') : '/';
+    var name = $(e.target).parent().parent().find('.first').text();
+    // use idempotent delete POST to get provider info. What a hack
+    $.post('/api/instructions/delete', {
+      path: path,
+      name: name
+    }, function (data) {
+      // TODO: directories
+      if (data.status === 'success' && data.file.provider === 'dropbox') {
+        $.ajax({
+          type: 'GET',
+          url: 'https://api-content.dropbox.com/1/files/auto' + data.file.path + data.file.name,
+          headers: {'Authorization': 'Bearer ' + data.file.account.oauthToken},
+          success: function(file) {
+            //saveAs(file, data.file.name);
+          }
+        });
+      } else if (data.status === 'success' && data.file.provider === 'gdrive') {
+        console.log('not yet implemented');
+      }
+    });
+  });
+
   $('#list').on('click', '.delete', function (e) {
     e.preventDefault();
     var path = window.location.hash ? window.location.hash.replace('#', '') : '/';
@@ -70,7 +95,6 @@ $(function () {
     }, function (data) {
       // TODO: directories
       if (data.status === 'success' && data.file.provider === 'dropbox') {
-        console.log(data.file.account);
         $.ajax({
           type: 'POST',
           url: 'https://api.dropbox.com/1/fileops/delete',
