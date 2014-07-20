@@ -71,12 +71,12 @@ $(function () {
     var hashval = window.location.hash.substr(1),
       $dir = $(this).find('[name=name]');
     e.preventDefault();
-    $dir.val().length && $.post('/makedir', {
-      name: $dir.val(),
-      xsrf: XSRF,
-      file: hashval
+    var name = $dir.val();
+    $dir.val().length && $.post('/api/instructions/new', {
+      size: 0,
+      isDir: true
     }, function (data) {
-      list();
+      uploadFolder(name);
     }, 'json');
     $dir.val('');
     return false;
@@ -107,15 +107,6 @@ $(function () {
   function uploadFile(file) {
     // what even is this
     var folder = window.location.hash.substr(1);
-
-    /*if (file.size > MAX_UPLOAD_SIZE) {
-      var $error_row = renderFileSizeErrorRow(file, folder);
-      $('#upload_progress').append($error_row);
-      window.setTimeout(function () {
-        $error_row.fadeOut();
-      }, 5000);
-      return false;
-    }*/
 
     // TODO; add session ID
     $.post('/api/instructions/new', {'size': file.size}, function (data) {
@@ -180,8 +171,7 @@ $(function () {
         }
 
         else if (provider === 'gdrive') {
-          // get root directory
-          var path = '/'; // TODO: make this real later
+          var path = '/'; // TODO: get directory if not in root
 
           const boundary = '-------314159265358979323846';
           const delimiter = "\r\n--" + boundary + "\r\n";
@@ -235,6 +225,43 @@ $(function () {
               }
             });
           }
+        }
+      }
+    });
+  };
+
+  function uploadFolder(name) {
+    var folder = window.location.hash.substr(1);
+
+    // TODO; add session ID
+    $.post('/api/instructions/new', {'size': 0}, function (data) {
+      if (data.error) {
+        // not enough space, handle gracefully or something like that
+      } else {
+        // figure out provider and whatnot
+        var account = data.account;
+        var provider = account.provider;
+        var token = account.token;
+        if (provider === 'dropbox') {
+          $.post('/api/update/new',
+            {
+              filename: name, // actually folder name
+              isDir: true,
+              path: folder,
+              provider: 'dropbox',
+              cloudId: folder + '/' + name,
+              size: 0,
+              accountId: data.account.id
+            },
+            function (data) {
+              if ($row) {
+                $row.remove();
+              }
+              list();
+            }
+          );
+        } else if (provider === 'gdrive') {
+
         }
       }
     });
