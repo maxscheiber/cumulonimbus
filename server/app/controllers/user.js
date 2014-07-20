@@ -21,7 +21,7 @@ exports.show = function(req, res) {
 };
 
 exports.accounts = function(req, res) {
-  User.load(req.params.username, function(err, user) {
+  User.load(req.user.username, function(err, user) {
     if (err || !user) {
       return res.render('404', {message: 'User not found'});
     }

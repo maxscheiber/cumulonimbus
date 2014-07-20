@@ -64,6 +64,12 @@ FileSchema.statics = {
     this.find({user: userId, path: path}).exec(cb);
   },
 
+  forUserPathName: function(path, name, userId, cb) {
+    this.findOne({user: userId, path: path, name: name})
+    .populate('account')
+    .exec(cb);
+  },
+
   forAccount: function(accountId, cb) {
     this.find({account: accountId})
     .exec(cb);
