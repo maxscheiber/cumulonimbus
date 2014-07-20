@@ -82,12 +82,19 @@ FileSchema.statics = {
   },
 
   makeFile: function(file, cb) {
-    Account = mongoose.model('Account');
-    async.series([
-      async.apply(this.ensureFolder.bind(this), file.path, file.user),
-      file.save.bind(file),
-      async.apply(Account.addUsage.bind(Account), file.account, file.size)
-    ], cb);
+    var self = this;
+    this.forUserPathName(file.path, file.name, file.user, function(err, existingFile) {
+      if (existingFile) {
+        return cb();
+      }
+
+      var Account = mongoose.model('Account');
+      async.series([
+        async.apply(self.ensureFolder.bind(self), file.path, file.user),
+        file.save.bind(file),
+        async.apply(Account.addUsage.bind(Account), file.account, file.size)
+      ], cb);
+    })
   },
 
   makeFolder: function(path, name, userId, cb) {
