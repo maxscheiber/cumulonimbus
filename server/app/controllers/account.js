@@ -65,7 +65,7 @@ exports.create = function(req, res) {
     } else if (provider === 'gdrive') {
       return res.redirect('https://accounts.google.com/o/oauth2/auth?' + 'response_type=code' +
         '&client_id=' + process.env.GDRIVE_ID + '&redirect_uri=http://localhost:8080/gdrive' +
-        '&scope=profile&state=' + account._id);
+        '&scope=https://www.googleapis.com/auth/drive&state=' + account._id);
     } else {
       console.log('Invalid provider ' + provider);
     }

@@ -197,7 +197,18 @@ $(function () {
         }
 
         else if (provider === 'gdrive') {
-          
+          // get root directory
+          $.ajax({
+            url: 'https://www.googleapis.com/upload/drive/v2/files',
+            headers: { 
+              Authorization: 'Bearer ' + token
+            },
+            type: 'POST',
+            data: file,
+            success: function (data) {
+              console.log(data);
+            }
+          });
         }
       }
     });
@@ -218,19 +229,19 @@ $(function () {
 
   function list() {
     var hashval = window.location.hash.substr(1);
-    $.get('/api/folder/', {
-      // TODO: what even is hashval
-      'file': hashval
-    }, function (data) {
+    console.log('/api/folder/' + hashval);
+    $.get('/api/folder/' + hashval, function (data) {
+      console.log(data);
       $tbody.empty();
       $('#breadcrumb').empty().html(renderBreadcrumbs(hashval));
-      if (data.success) {
-        $.each(data.results, function (k, v) {
+      if (data.status) {
+        $.each(data.files, function (k, v) {
           $tbody.append(renderFileRow(v));
         });
-        !data.results.length && $tbody.append('<tr><td class="empty" colspan=5>This folder is empty</td</td>')
+        !data.files.length && $tbody.append('<tr><td class="empty" colspan=5>This folder is empty</td</td>')
       } else {
-        console.warn(data.error.msg);
+        console.warn('some stupid error, who knows');
+        console.log(data);
       }
       $('#table').retablesort();
     }, 'json');
@@ -238,15 +249,15 @@ $(function () {
 
   function renderFileRow(data) {
     var $link = $('<a class="name" />')
-      .attr('href', data.is_dir ? '#' + data.path : './' + data.path)
+      .attr('href', data.isDir ? '#' + data.path : './' + data.path)
       .text(data.name);
     var $dl_link = $('<a/>').attr('href', '?do=download&file=' + encodeURIComponent(data.path))
       .addClass('download').text('download');
     var $delete_link = $('<a href="#" />').attr('data-file', data.path).addClass('delete').text('delete');
     var $html = $('<tr />')
-      .addClass(data.is_dir ? 'is_dir' : '')
+      .addClass(data.isDir ? 'isDir' : '')
       .append($('<td class="first" />').append($link))
-      .append($('<td/>').attr('data-sort', data.is_dir ? -1 : data.size)
+      .append($('<td/>').attr('data-sort', data.isDir ? -1 : data.size)
         .html($('<span class="size" />').text(formatFileSize(data.size))))
       .append($('<td/>').attr('data-sort', data.mtime).text(formatTimestamp(data.mtime)))
       .append($('<td/>').append($dl_link).append($delete_link))
