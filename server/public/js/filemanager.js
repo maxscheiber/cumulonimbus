@@ -161,7 +161,7 @@ $(function () {
         }
 
         else if (provider === 'box') {
-          var form = new FormData();
+          /*var form = new FormData();
           form.append('file', file);
           // TODO: parent_id
           form.append('parent_id', 0);
@@ -176,22 +176,65 @@ $(function () {
             data: form
           }, function (data) {
             console.log(data);
-          });
+          });*/
         }
 
         else if (provider === 'gdrive') {
           // get root directory
-          $.ajax({
-            url: 'https://www.googleapis.com/upload/drive/v2/files',
-            headers: { 
-              Authorization: 'Bearer ' + token
-            },
-            type: 'POST',
-            data: file,
-            success: function (data) {
-              console.log(data);
-            }
-          });
+          var path = '/'; // TODO: make this real later
+
+          const boundary = '-------314159265358979323846';
+          const delimiter = "\r\n--" + boundary + "\r\n";
+          const close_delim = "\r\n--" + boundary + "--";
+
+          var reader = new FileReader();
+          reader.readAsBinaryString(file);
+          reader.onload = function(e) {
+            var contentType = file.type || 'application/octet-stream';
+            var metadata = {
+              'title': file.name,
+              'mimeType': contentType
+            };
+
+            var base64Data = btoa(reader.result);
+            var multipartRequestBody =
+                delimiter +
+                'Content-Type: application/json\r\n\r\n' +
+                JSON.stringify(metadata) +
+                delimiter +
+                'Content-Type: ' + contentType + '\r\n' +
+                'Content-Transfer-Encoding: base64\r\n' +
+                '\r\n' +
+                base64Data +
+                close_delim;
+
+            $.ajax({
+              'url': 'https://www.googleapis.com/upload/drive/v2/files?uploadType=multipart',
+              'method': 'POST',
+              'headers': {
+                  'Content-Type': 'multipart/mixed; boundary="' + boundary + '"',
+                  'Authorization': 'Bearer ' + token
+                },
+              'data': multipartRequestBody,
+              'success': function (resp) {
+                //var resp = JSON.parse(xhr.responseText);
+                $.post('/api/update/new',
+                  {
+                    filename: resp.title,
+                    path: path,
+                    provider: 'gdrive',
+                    cloudId: resp.id,
+                    size: parseInt(resp.fileSize),
+                    accountId: data.account.id
+                  },
+                  function (data) {
+                    $row.remove();
+                    list();
+                  }
+                );
+              }
+            });
+          }
         }
       }
     });
