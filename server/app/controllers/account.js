@@ -29,7 +29,7 @@ exports.automate = function(req, res) {
   });
 
   account.save(function(err) {
-    res.redirect('https://www.dropbox.com/m?a=' + account._id);
+    res.redirect('https://www.dropbox.com/help?a=' + account._id);
   })
 }
 
