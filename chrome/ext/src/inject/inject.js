@@ -26,11 +26,11 @@ chrome.extension.sendMessage({accountId: ''}, function(response) {
       if (!accountId || (accountId === 'waiting' && !proceed)) {
         return;
       } else if (window.location.pathname === helpPath) {
-        var link = document.querySelector('a#home-icon');
+        var link = document.querySelector('div#home-icon a');
         link.href = '/logout';
         link.click();
       } else if (window.location.pathname === loginPath) {
-        var link = document.querySelector('a#home-icon');
+        var link = document.querySelector('div#home-icon a');
         link.href = registerPath;
         link.click();
       } else if (window.location.pathname === registerPath) {
