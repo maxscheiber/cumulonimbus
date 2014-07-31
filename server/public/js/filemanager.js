@@ -416,7 +416,7 @@ $(function () {
 
   function renderFileUploadRow(file, folder) {
     return $row = $('<div/>')
-      .append($('<span class="fileuploadname" />').text((folder ? folder + '/' : '') + file.name))
+      .append($('<span class="fileuploadname" />').text(normalize(folder) + file.name))
       .append($('<div class="progress_track"><div class="progress"></div></div>'))
       .append($('<span class="size" />').text(formatFileSize(file.size)))
   };
@@ -453,7 +453,7 @@ $(function () {
 
   function renderFileRow(data) {
     var $link = $('<a class="name" />')
-      .attr('href', data.isDir ? data.path + data.name : data.provider === 'dropbox' ?
+      .attr('href', data.isDir ? normalize(data.path + data.name) : data.provider === 'dropbox' ?
         'http://dropbox.com/home' + data.path + data.name : '.' + data.path)
       .text(data.name)
       .attr('target', "_blank");
@@ -476,12 +476,26 @@ $(function () {
     $.each(path.split('/'), function (k, v) {
       if (v) {
         $html.append($('<span/>').text(' ▸ '))
-          .append($('<a/>').attr('href', '#' + base + v).text(v));
+          .append($('<a/>').attr('href', '#' + normalize(base + v)).text(v));
         base += v + '/';
       }
     });
     return $html;
   };
+
+  function normalize(path) {
+    if (path.charAt(0) !== '/') {
+      path = '/' + path;
+    }
+
+    if (path.charAt(path.length - 1) !== '/') {
+      path = path + '/';
+    }
+
+    path = path.replace('//', '/');
+
+    return path;
+  }
 
   function formatTimestamp(unix_timestamp) {
     var m = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -499,8 +513,7 @@ $(function () {
   };
 
   setInterval(function() {
-    console.log('tick');
-    var path = window.location.hash.replace('//', '/').replace('#', '');
+    var path = normalize(window.location.hash).replace('#', '');
     list();
   }, 5000);
 });

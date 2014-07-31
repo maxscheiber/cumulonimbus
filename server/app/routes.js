@@ -21,7 +21,7 @@ module.exports = function(app) {
   app.get('/accounts', auth.requireLogin, user.accounts);
   app.get('/account/new', auth.requireLogin, account.create);
   app.post('/account/new', account.create);
-  app.get('/account/:account', account.show);
+  app.get('/accounts/:account', account.show);
 
   app.get('/dropbox', api.dropbox);
   app.get('/box', api.box);

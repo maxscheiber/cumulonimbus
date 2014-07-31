@@ -232,15 +232,34 @@ exports.dropbox = function(req, res, next) {
           }
 
           account.oauthToken = accessToken;
-          account.save(function(err) {
+
+          var options = {
+            url: 'https://api.dropbox.com/1/account/info',
+            headers: {
+              'Authorization': 'Bearer ' + account.oauthToken
+            }
+          };
+
+          request(options, function (err, resp, body) {
             if (err) {
               console.log(err);
-              return res.render('500');
+              return;
             }
+            var data = JSON.parse(body);
+            account.capacity = data.quota_info.quota;
+            account.free = data.quota_info.quota;
+            account.used = 0;
 
-            updateFileList(account);
+            account.save(function(err) {
+              if (err) {
+                console.log(err);
+                return res.render('500');
+              }
 
-            return res.redirect('/filemanager');
+              updateFileList(account);
+
+              return res.redirect('/filemanager');
+            });
           });
         });
       } else {

@@ -1,5 +1,6 @@
 var mongoose = require('mongoose'),
     passport = require('passport'),
+    request = require('request'),
     dotenv = require('dotenv');
 
 var Account = mongoose.model('Account');
@@ -11,7 +12,10 @@ exports.show = function(req, res) {
       return res.render('404', {message: 'Account not found'});
     }
     return res.render('account', {
-      account: account
+      account: account,
+      partials: {
+        account: 'partials/account'
+      }
     });
   });
 };
