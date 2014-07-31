@@ -6,6 +6,7 @@ logs
 
 venv/
 build/
+web/
 *.pyc
 *.env
 change_times.txt

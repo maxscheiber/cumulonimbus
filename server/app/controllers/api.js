@@ -334,14 +334,33 @@ exports.gdrive = function(req, res, next) {
           }
 
           account.oauthToken = accessToken;
-          account.save(function(err) {
+
+          var options = {
+            url: 'https://www.googleapis.com/drive/v2/about',
+            headers: {
+              'Authorization': 'Bearer ' + account.oauthToken
+            }
+          };
+
+          request(options, function (err, resp, body) {
             if (err) {
               console.log(err);
-              return res.render('500');
+              return;
             }
+            var data = JSON.parse(body);
+            account.capacity = data.quotaBytesTotal;
+            account.free = data.quotaBytesTotal;
+            account.used = 0;
 
-            updateFileList(account);
-            return res.render('accounts');
+            account.save(function(err) {
+              if (err) {
+                console.log(err);
+                return res.render('500');
+              }
+
+              updateFileList(account);
+              return res.redirect('/filemanager');
+            });
           });
         });
       } else {
