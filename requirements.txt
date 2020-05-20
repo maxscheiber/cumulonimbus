@@ -3,7 +3,7 @@ argh==0.25.0
 box.py==1.2.8
 dropbox==2.1.0
 google-api-python-client==1.2
-httplib2==0.9
+httplib2==0.18.0
 lxml==3.3.5
 pathtools==0.1.2
 requests==2.3.0
