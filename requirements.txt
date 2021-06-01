@@ -7,6 +7,6 @@ httplib2==0.9
 lxml==3.3.5
 pathtools==0.1.2
 requests==2.3.0
-urllib3==1.9
+urllib3==1.26.5
 watchdog==0.8.0
 wsgiref==0.1.2
