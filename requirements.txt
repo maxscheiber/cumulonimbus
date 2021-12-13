@@ -4,7 +4,7 @@ box.py==1.2.8
 dropbox==2.1.0
 google-api-python-client==1.2
 httplib2==0.9
-lxml==3.3.5
+lxml==4.6.5
 pathtools==0.1.2
 requests==2.3.0
 urllib3==1.9
